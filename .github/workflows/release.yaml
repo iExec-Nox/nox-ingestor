@@ -16,5 +16,5 @@ jobs:
     if: github.repository_owner == 'iExec-Nox'
     uses: iExecBlockchainComputing/github-actions-workflows/.github/workflows/release-please.yml@release-please-v2.0.0
     secrets:
-      application_id: ${{ secrets.RELEASE_PLEASE_APPLICATION_ID }}
-      application_private_key: ${{ secrets.RELEASE_PLEASE_PRIVATE_KEY }}
+      RELEASE_PLEASE_APPLICATION_ID: ${{ secrets.RELEASE_PLEASE_APPLICATION_ID }}
+      RELEASE_PLEASE_PRIVATE_KEY: ${{ secrets.RELEASE_PLEASE_PRIVATE_KEY }}
