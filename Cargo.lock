@@ -2340,6 +2340,7 @@ dependencies = [
  "config",
  "config-secret",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
