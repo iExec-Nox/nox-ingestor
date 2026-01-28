@@ -118,21 +118,19 @@ impl NoxEventParser {
         let topic0 = topics[0];
 
         let event = match topic0 {
-            t if t == PlaintextToEncrypted::SIGNATURE_HASH => {
-                PlaintextToEncrypted::decode_log(&log.inner)
-                    .ok()
-                    .map(|e| NoxEvent::PlaintextToEncrypted(e.data))
-            }
-            t if t == Add::SIGNATURE_HASH => Add::decode_log(&log.inner)
+            PlaintextToEncrypted::SIGNATURE_HASH => PlaintextToEncrypted::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::PlaintextToEncrypted(e.data)),
+            Add::SIGNATURE_HASH => Add::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Add(e.data)),
-            t if t == Sub::SIGNATURE_HASH => Sub::decode_log(&log.inner)
+            Sub::SIGNATURE_HASH => Sub::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Sub(e.data)),
-            t if t == Div::SIGNATURE_HASH => Div::decode_log(&log.inner)
+            Div::SIGNATURE_HASH => Div::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Div(e.data)),
-            t if t == Select::SIGNATURE_HASH => Select::decode_log(&log.inner)
+            Select::SIGNATURE_HASH => Select::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Select(e.data)),
             _ => {
