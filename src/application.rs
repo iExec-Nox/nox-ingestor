@@ -1,7 +1,7 @@
-use crate::config::Config;
 use anyhow::Result;
 use tracing::debug;
 
+use crate::config::Config;
 pub struct Application {
     config: Config,
 }

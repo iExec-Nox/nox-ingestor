@@ -1,10 +1,11 @@
 pub mod application;
 pub mod config;
-use crate::application::Application;
-use crate::config::Config;
 
 use tracing::error;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use crate::application::Application;
+use crate::config::Config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
