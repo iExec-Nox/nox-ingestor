@@ -28,3 +28,4 @@ target
 # local config
 tenderly.yaml
 .env
+nox_ingestor_state_*.json
