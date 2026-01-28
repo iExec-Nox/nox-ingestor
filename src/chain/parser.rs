@@ -1,19 +1,87 @@
-//! NOX event parser for extracting raw event data
+//! NOX event parser using alloy sol! macro for type-safe event parsing
 
-use alloy::hex;
-use alloy::primitives::{Address, B256, keccak256};
+use alloy::primitives::{Address, B256};
 use alloy::rpc::types::Log;
-use once_cell::sync::Lazy;
+use alloy::sol;
+use alloy::sol_types::SolEvent;
 use tracing::{debug, info};
 
-// Event signatures for NOX operations
-static PLAINTEXT_TO_ENCRYPTED_SIG: Lazy<B256> =
-    Lazy::new(|| keccak256("PlaintextToEncrypted(address,uint256,uint8,bytes32)"));
-static ADD_SIG: Lazy<B256> = Lazy::new(|| keccak256("Add(address,bytes32,bytes32,bytes32)"));
-static SUB_SIG: Lazy<B256> = Lazy::new(|| keccak256("Sub(address,bytes32,bytes32,bytes32)"));
-static DIV_SIG: Lazy<B256> = Lazy::new(|| keccak256("Div(address,bytes32,bytes32,bytes32)"));
-static SELECT_SIG: Lazy<B256> =
-    Lazy::new(|| keccak256("Select(address,bytes32,bytes32,bytes32,bytes32)"));
+// Define NOX events using sol! macro
+// Signatures are computed at compile-time as constants
+sol! {
+    #[derive(Debug)]
+    event PlaintextToEncrypted(
+        address indexed caller,
+        uint256 value,
+        uint8 valueType,
+        bytes32 handle
+    );
+
+    #[derive(Debug)]
+    event Add(
+        address indexed caller,
+        bytes32 lhs,
+        bytes32 rhs,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event Sub(
+        address indexed caller,
+        bytes32 lhs,
+        bytes32 rhs,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event Div(
+        address indexed caller,
+        bytes32 lhs,
+        bytes32 rhs,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event Select(
+        address indexed caller,
+        bytes32 condition,
+        bytes32 ifTrue,
+        bytes32 ifFalse,
+        bytes32 result
+    );
+}
+
+/// Parsed NOX event with strongly typed data
+#[derive(Debug, Clone)]
+pub enum NoxEvent {
+    PlaintextToEncrypted(PlaintextToEncrypted),
+    Add(Add),
+    Sub(Sub),
+    Div(Div),
+    Select(Select),
+}
+
+impl NoxEvent {
+    pub fn event_type(&self) -> &'static str {
+        match self {
+            Self::PlaintextToEncrypted(_) => "plaintext_to_encrypted",
+            Self::Add(_) => "add",
+            Self::Sub(_) => "sub",
+            Self::Div(_) => "div",
+            Self::Select(_) => "select",
+        }
+    }
+
+    pub fn caller(&self) -> Address {
+        match self {
+            Self::PlaintextToEncrypted(e) => e.caller,
+            Self::Add(e) => e.caller,
+            Self::Sub(e) => e.caller,
+            Self::Div(e) => e.caller,
+            Self::Select(e) => e.caller,
+        }
+    }
+}
 
 /// NOX event parser
 pub struct NoxEventParser {
@@ -21,79 +89,71 @@ pub struct NoxEventParser {
 }
 
 impl NoxEventParser {
-    /// Create a new NOX event parser
     pub fn new(contract_address: Address) -> Self {
         Self { contract_address }
     }
 
-    /// Get the contract address
     pub fn contract_address(&self) -> Address {
         self.contract_address
     }
 
-    /// Get all event signatures to filter
+    /// Get all event signatures to filter (compile-time constants)
     pub fn event_signatures(&self) -> Vec<B256> {
         vec![
-            *PLAINTEXT_TO_ENCRYPTED_SIG,
-            *ADD_SIG,
-            *SUB_SIG,
-            *DIV_SIG,
-            *SELECT_SIG,
+            PlaintextToEncrypted::SIGNATURE_HASH,
+            Add::SIGNATURE_HASH,
+            Sub::SIGNATURE_HASH,
+            Div::SIGNATURE_HASH,
+            Select::SIGNATURE_HASH,
         ]
     }
 
-    /// Parse a log
-    ///
-    /// Extracts:
-    /// - event_type from topic[0]
-    /// - caller from topic[1]
-    /// - raw_data as hex string from log data (non-indexed params)
-    pub fn parse(&self, log: &Log) {
+    /// Parse a log into a strongly-typed NoxEvent
+    pub fn parse(&self, log: &Log) -> Option<NoxEvent> {
         let topics = log.topics();
-        if topics.len() < 2 {
-            return;
+        if topics.is_empty() {
+            return None;
         }
 
         let topic0 = topics[0];
 
-        // Determine event type
-        let event_type = if topic0 == *PLAINTEXT_TO_ENCRYPTED_SIG {
-            "plaintext_to_encrypted"
-        } else if topic0 == *ADD_SIG {
-            "add"
-        } else if topic0 == *SUB_SIG {
-            "sub"
-        } else if topic0 == *DIV_SIG {
-            "div"
-        } else if topic0 == *SELECT_SIG {
-            "select"
-        } else {
-            debug!("Unknown event type: {:?}", topic0);
-            return;
-        };
+        let event = match topic0 {
+            t if t == PlaintextToEncrypted::SIGNATURE_HASH => {
+                PlaintextToEncrypted::decode_log(&log.inner)
+                    .ok()
+                    .map(|e| NoxEvent::PlaintextToEncrypted(e.data))
+            }
+            t if t == Add::SIGNATURE_HASH => Add::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Add(e.data)),
+            t if t == Sub::SIGNATURE_HASH => Sub::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Sub(e.data)),
+            t if t == Div::SIGNATURE_HASH => Div::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Div(e.data)),
+            t if t == Select::SIGNATURE_HASH => Select::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Select(e.data)),
+            _ => {
+                debug!("Unknown event type: {:?}", topic0);
+                None
+            }
+        }?;
 
-        // Validate data length based on event type
-        let data = &log.data().data;
-
-        // Extract caller from topic[1]
-        let caller = Address::from_slice(&topics[1].as_slice()[12..]);
-
-        // Get transaction hash and log index
-        let tx_hash = log.transaction_hash.unwrap_or_default().to_string();
+        let tx_hash = log.transaction_hash.unwrap_or_default();
         let log_index = log.log_index.unwrap_or_default() as u32;
         let block_number = log.block_number.unwrap_or(0);
 
-        // Convert raw data to hex string
-        let raw_data = format!("0x{}", hex::encode(data));
-
         info!(
-            event_type = event_type,
+            event_type = event.event_type(),
             block_number = block_number,
-            tx_hash = tx_hash,
+            tx_hash = %tx_hash,
             log_index = log_index,
-            caller = caller.to_string(),
-            raw_data = raw_data,
+            caller = %event.caller(),
             "Parsed event"
         );
+
+        Some(event)
     }
 }

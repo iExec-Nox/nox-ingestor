@@ -2339,7 +2339,6 @@ dependencies = [
  "anyhow",
  "config",
  "config-secret",
- "once_cell",
  "serde",
  "thiserror",
  "tokio",
