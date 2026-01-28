@@ -1,5 +1,7 @@
 pub mod application;
+pub mod chain;
 pub mod config;
+pub mod error;
 
 use tracing::error;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
