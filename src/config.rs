@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use config::{Config as ConfigBuilder, ConfigError, Environment};
 use config_secret::EnvironmentSecretFile;
 use serde::Deserialize;
@@ -67,5 +69,14 @@ impl Config {
             .build()?;
 
         config.try_deserialize()
+    }
+
+    /// Get the state file path, using default if not specified
+    pub fn state_file_path(&self) -> PathBuf {
+        if self.app.state_file.is_empty() {
+            PathBuf::from(format!("./nox_ingestor_state_{}.json", self.chain.chain_id))
+        } else {
+            PathBuf::from(&self.app.state_file)
+        }
     }
 }
