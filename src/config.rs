@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use alloy::primitives::Address;
 use config::{Config as ConfigBuilder, ConfigError, Environment};
 use config_secret::EnvironmentSecretFile;
 use serde::Deserialize;
@@ -17,7 +18,7 @@ pub struct ChainConfig {
     pub rpc_endpoint: String,
 
     /// Contract address to monitor
-    pub contract_address: String,
+    pub contract_address: Address,
 
     /// Chain ID (default: 421614 for Arbitrum Sepolia)
     pub chain_id: u64,

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-alloy = { version = "1.5.2", features = ["provider-http", "providers", "rpc-types", "sol-types"] }
+alloy = { version = "1.5.2", features = ["provider-http", "providers", "rpc-types", "serde", "sol-types"] }
 anyhow = "1.0.100"
 config = "0.15.19"
 config-secret = "0.1.0"
