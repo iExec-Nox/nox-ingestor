@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tracing::{debug, info};
 
 use crate::chain::{ChainClient, NoxEventParser};
@@ -19,16 +19,10 @@ impl Application {
         debug!("Starting ingestor");
         debug!("Config: {:?}", self.config);
 
-        let contract_address = self
-            .config
-            .chain
-            .contract_address
-            .parse()
-            .context("invalid chain.contract_address")?;
-        let parser = NoxEventParser::new(contract_address);
+        let parser = NoxEventParser::new(self.config.chain.contract_address);
         let client = ChainClient::new(
             &self.config.chain.rpc_endpoint,
-            contract_address,
+            self.config.chain.contract_address,
             parser.event_signatures(),
         )?;
 
