@@ -28,6 +28,9 @@ pub struct ChainConfig {
 
     /// Delay between polls in milliseconds (default: 500)
     pub poll_delay_ms: u64,
+
+    /// Delay between retries in milliseconds (default: 250)
+    pub retry_delay_ms: u64,
 }
 
 /// Application configuration
@@ -56,6 +59,7 @@ impl Config {
             )?
             .set_default("chain.chain_id", 421614)?
             .set_default("chain.poll_delay_ms", 500)?
+            .set_default("chain.retry_delay_ms", 250)?
             .set_default("chain.initial_block", 0)?
             .set_default("chain.batch_size", 50)?
             .set_default("app.flush_interval_secs", 5)?
