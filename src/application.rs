@@ -1,7 +1,8 @@
 use anyhow::Result;
+use tokio::time::sleep;
 use tracing::{debug, info};
 
-use crate::chain::{ChainClient, NoxEventParser};
+use crate::chain::{BlockReader, NoxEventParser};
 use crate::config::Config;
 use crate::error::NoxError;
 use crate::state::StateStore;
@@ -20,35 +21,60 @@ impl Application {
         debug!("Config: {:?}", self.config);
 
         let parser = NoxEventParser::new(self.config.chain.contract_address);
-        let client = ChainClient::new(
+
+        let block_reader = BlockReader::new(
             &self.config.chain.rpc_endpoint,
-            self.config.chain.contract_address,
+            parser.contract_address(),
             parser.event_signatures(),
+            self.config.chain.batch_size,
+            self.config.chain.poll_delay_ms,
+            self.config.chain.retry_delay_ms,
         )?;
 
         let state_store = self.load_state_store().await?;
         let mut next_block = self.determine_start_block(&state_store)?;
 
-        let latest_block = client.get_latest_block().await?;
-        info!(latest_block, "Latest block");
+        loop {
+            let latest_block = block_reader.get_latest_block().await?;
+            if next_block > latest_block {
+                sleep(block_reader.poll_delay()).await;
+            } else {
+                let batch = block_reader
+                    .read_batch_with_retry(next_block, latest_block)
+                    .await;
 
-        while next_block <= latest_block {
-            let to_block = (next_block + self.config.chain.batch_size - 1).min(latest_block);
-            let logs = client.get_logs(next_block, to_block).await?;
-            info!(
-                count = logs.len(),
-                from_block = next_block,
-                to_block,
-                "Fetched logs"
-            );
-            for log in logs {
-                parser.parse(&log);
+                for log in batch.logs {
+                    let nox_event = parser.parse(&log);
+                    if nox_event.is_none() {
+                        continue;
+                    }
+                    let nox_event = nox_event.unwrap();
+                    let event_type = nox_event.event_type();
+                    let caller = nox_event.caller();
+                    info!(
+                        log_index = log.log_index,
+                        event_type,
+                        caller = %caller,
+                        "Event"
+                    );
+                }
+                if batch.end_block >= batch.start_block {
+                    state_store.update(batch.end_block);
+                    next_block = batch.end_block + 1;
+                }
+
+                // Only delay if we're caught up (within 1 batch of head)
+                // Skip delay when catching up to maximize throughput
+                let gap = latest_block.saturating_sub(batch.end_block);
+                if gap <= 1 {
+                    sleep(block_reader.poll_delay()).await;
+                } else {
+                    debug!(gap, "Catching up, skipping poll delay");
+                }
+
+                state_store.persist().await?;
             }
-            state_store.update(to_block); // Last processed block
-            next_block = to_block + 1;
         }
-        state_store.persist().await?;
-        Ok(())
     }
 
     /// Load state store

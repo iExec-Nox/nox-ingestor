@@ -4,7 +4,7 @@ use alloy::primitives::{Address, B256};
 use alloy::rpc::types::Log;
 use alloy::sol;
 use alloy::sol_types::SolEvent;
-use tracing::{debug, info};
+use tracing::debug;
 
 // Define NOX events using sol! macro
 // Signatures are computed at compile-time as constants
@@ -138,19 +138,6 @@ impl NoxEventParser {
                 None
             }
         }?;
-
-        let tx_hash = log.transaction_hash.unwrap_or_default();
-        let log_index = log.log_index.unwrap_or_default() as u32;
-        let block_number = log.block_number.unwrap_or(0);
-
-        info!(
-            event_type = event.event_type(),
-            block_number = block_number,
-            tx_hash = %tx_hash,
-            log_index = log_index,
-            caller = %event.caller(),
-            "Parsed event"
-        );
 
         Some(event)
     }
