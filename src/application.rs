@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 use tokio::time::{interval, sleep, timeout};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, info_span, warn};
 
 /// Timeout for final state persistence on shutdown
 const SHUTDOWN_PERSIST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -11,6 +11,7 @@ const SHUTDOWN_PERSIST_TIMEOUT: Duration = Duration::from_secs(5);
 use crate::chain::{BlockReader, NoxEventParser};
 use crate::config::Config;
 use crate::error::NoxError;
+use crate::events::{EventPayload, TransactionEvent};
 use crate::state::StateStore;
 
 pub struct Application {
@@ -32,11 +33,11 @@ impl Application {
 
         let block_reader = BlockReader::new(
             &self.config.chain.rpc_endpoint,
-            parser.contract_address(),
-            parser.event_signatures(),
+            parser,
             self.config.chain.batch_size,
             self.config.chain.poll_delay_ms,
             self.config.chain.retry_delay_ms,
+            self.config.chain.chain_id,
         )?;
 
         let state_store = self.load_state_store().await?;
@@ -107,18 +108,18 @@ impl Application {
                         .read_batch_with_retry(next_block, latest)
                         .await;
 
-                    for log in batch.logs {
-                        let Some(nox_event) = parser.parse(&log) else {
-                            continue;
-                        };
-                        let event_type = nox_event.event_type();
-                        let caller = nox_event.caller();
-                        info!(
-                            log_index = log.log_index,
-                            event_type,
-                            caller = %caller,
-                            "Event"
+                    for transaction in batch.transactions {
+                        let span = info_span!(
+                            "transaction",
+                            tx_hash = transaction.transaction_hash,
+                            block_number = transaction.block_number,
+                            event_count = transaction.events.len()
                         );
+                        let _guard = span.enter();
+
+                        for event in &transaction.events {
+                            log_event(event);
+                        }
                     }
 
                     if batch.end_block >= batch.start_block {
@@ -237,6 +238,62 @@ impl Application {
                 .await
                 .expect("Failed to install Ctrl+C handler");
             "Ctrl+C"
+        }
+    }
+}
+
+fn log_event(event: &TransactionEvent) {
+    match &event.payload {
+        EventPayload::Add(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = event.caller,
+                lhs = op.lhs,
+                rhs = op.rhs,
+                result = op.result,
+                "Add"
+            );
+        }
+        EventPayload::Sub(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = event.caller,
+                lhs = op.lhs,
+                rhs = op.rhs,
+                result = op.result,
+                "Sub"
+            );
+        }
+        EventPayload::Div(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = event.caller,
+                lhs = op.lhs,
+                rhs = op.rhs,
+                result = op.result,
+                "Div"
+            );
+        }
+        EventPayload::Select(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = event.caller,
+                condition = op.condition,
+                if_true = op.if_true,
+                if_false = op.if_false,
+                result = op.result,
+                "Select"
+            );
+        }
+        EventPayload::PlaintextToEncrypted(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = event.caller,
+                value = op.value,
+                value_type = op.value_type,
+                handle = op.handle,
+                "PlaintextToEncrypted"
+            );
         }
     }
 }
