@@ -70,7 +70,7 @@ pub struct TransactionEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionMessage {
     /// Chain ID where the events occurred
-    pub chain_id: u64,
+    pub chain_id: u32,
     /// Block number
     pub block_number: u64,
     /// First log index in this transaction (used for ordering)
@@ -85,7 +85,7 @@ pub struct TransactionMessage {
 impl TransactionMessage {
     /// Creates a new transaction message
     pub fn new(
-        chain_id: u64,
+        chain_id: u32,
         block_number: u64,
         first_log_index: u64,
         transaction_hash: String,

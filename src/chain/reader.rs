@@ -36,7 +36,7 @@ pub struct BlockReader {
     batch_size: u64,
     poll_delay: Duration,
     retry_delay_ms: Duration,
-    chain_id: u64,
+    chain_id: u32,
 }
 
 impl BlockReader {
@@ -47,7 +47,7 @@ impl BlockReader {
         batch_size: u64,
         poll_delay_ms: u64,
         retry_delay_ms: u64,
-        chain_id: u64,
+        chain_id: u32,
     ) -> Result<Self, ChainError> {
         let client = ChainClient::new(
             rpc_endpoint,
