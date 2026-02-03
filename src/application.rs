@@ -11,7 +11,7 @@ const SHUTDOWN_PERSIST_TIMEOUT: Duration = Duration::from_secs(5);
 use crate::chain::{BlockReader, NoxEventParser};
 use crate::config::Config;
 use crate::error::NoxError;
-use crate::events::{EventPayload, TransactionEvent};
+use crate::events::{Operator, TransactionEvent};
 use crate::state::StateStore;
 
 pub struct Application {
@@ -243,8 +243,8 @@ impl Application {
 }
 
 fn log_event(event: &TransactionEvent) {
-    match &event.payload {
-        EventPayload::Add(op) => {
+    match &event.operator {
+        Operator::Add(op) => {
             info!(
                 log_index = event.log_index,
                 caller = event.caller,
@@ -254,7 +254,7 @@ fn log_event(event: &TransactionEvent) {
                 "Add"
             );
         }
-        EventPayload::Sub(op) => {
+        Operator::Sub(op) => {
             info!(
                 log_index = event.log_index,
                 caller = event.caller,
@@ -264,7 +264,7 @@ fn log_event(event: &TransactionEvent) {
                 "Sub"
             );
         }
-        EventPayload::Div(op) => {
+        Operator::Div(op) => {
             info!(
                 log_index = event.log_index,
                 caller = event.caller,
@@ -274,7 +274,7 @@ fn log_event(event: &TransactionEvent) {
                 "Div"
             );
         }
-        EventPayload::Select(op) => {
+        Operator::Select(op) => {
             info!(
                 log_index = event.log_index,
                 caller = event.caller,
@@ -285,7 +285,7 @@ fn log_event(event: &TransactionEvent) {
                 "Select"
             );
         }
-        EventPayload::PlaintextToEncrypted(op) => {
+        Operator::PlaintextToEncrypted(op) => {
             info!(
                 log_index = event.log_index,
                 caller = event.caller,

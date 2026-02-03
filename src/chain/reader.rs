@@ -10,7 +10,7 @@ use tracing::{debug, error, warn};
 
 use crate::error::ChainError;
 use crate::events::{
-    BinaryOperation, EncryptionOperation, EventPayload, SelectOperation, TransactionEvent,
+    BinaryOperation, EncryptionOperation, Operator, SelectOperation, TransactionEvent,
     TransactionMessage,
 };
 
@@ -216,30 +216,28 @@ fn to_transaction_event(
     let log_index = log.log_index?;
     let caller = format!("{:#x}", event.caller());
 
-    let payload = match event {
-        NoxEvent::PlaintextToEncrypted(e) => {
-            EventPayload::PlaintextToEncrypted(EncryptionOperation {
-                value: e.value.to_string(),
-                value_type: e.valueType,
-                handle: to_handle(e.handle),
-            })
-        }
-        NoxEvent::Add(e) => EventPayload::Add(BinaryOperation {
+    let operator = match event {
+        NoxEvent::PlaintextToEncrypted(e) => Operator::PlaintextToEncrypted(EncryptionOperation {
+            value: e.value.to_string(),
+            value_type: e.valueType,
+            handle: to_handle(e.handle),
+        }),
+        NoxEvent::Add(e) => Operator::Add(BinaryOperation {
             lhs: to_handle(e.lhs),
             rhs: to_handle(e.rhs),
             result: to_handle(e.result),
         }),
-        NoxEvent::Sub(e) => EventPayload::Sub(BinaryOperation {
+        NoxEvent::Sub(e) => Operator::Sub(BinaryOperation {
             lhs: to_handle(e.lhs),
             rhs: to_handle(e.rhs),
             result: to_handle(e.result),
         }),
-        NoxEvent::Div(e) => EventPayload::Div(BinaryOperation {
+        NoxEvent::Div(e) => Operator::Div(BinaryOperation {
             lhs: to_handle(e.lhs),
             rhs: to_handle(e.rhs),
             result: to_handle(e.result),
         }),
-        NoxEvent::Select(e) => EventPayload::Select(SelectOperation {
+        NoxEvent::Select(e) => Operator::Select(SelectOperation {
             condition: to_handle(e.condition),
             if_true: to_handle(e.ifTrue),
             if_false: to_handle(e.ifFalse),
@@ -250,7 +248,7 @@ fn to_transaction_event(
     let event = TransactionEvent {
         log_index,
         caller,
-        payload,
+        operator,
     };
 
     Some((block_number, log_index, tx_hash, event))

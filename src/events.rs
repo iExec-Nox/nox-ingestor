@@ -36,25 +36,12 @@ pub struct EncryptionOperation {
 /// Event payload with typed variants
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum EventPayload {
+pub enum Operator {
     PlaintextToEncrypted(EncryptionOperation),
     Add(BinaryOperation),
     Sub(BinaryOperation),
     Div(BinaryOperation),
     Select(SelectOperation),
-}
-
-impl EventPayload {
-    /// Returns the event type name
-    pub fn event_type(&self) -> &'static str {
-        match self {
-            Self::PlaintextToEncrypted(_) => "plaintext_to_encrypted",
-            Self::Add(_) => "add",
-            Self::Sub(_) => "sub",
-            Self::Div(_) => "div",
-            Self::Select(_) => "select",
-        }
-    }
 }
 
 /// Individual event within a transaction
@@ -63,7 +50,7 @@ pub struct TransactionEvent {
     pub log_index: u64,
     pub caller: String,
     #[serde(flatten)]
-    pub payload: EventPayload,
+    pub operator: Operator,
 }
 
 /// Message format grouping events by transaction
