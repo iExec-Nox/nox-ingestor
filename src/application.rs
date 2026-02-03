@@ -113,6 +113,7 @@ impl Application {
                             "transaction",
                             tx_hash = transaction.transaction_hash,
                             block_number = transaction.block_number,
+                            caller = %format!("{:#x}", transaction.caller),
                             event_count = transaction.events.len()
                         );
                         let _guard = span.enter();
@@ -247,7 +248,7 @@ fn log_event(event: &TransactionEvent) {
         Operator::Add(op) => {
             info!(
                 log_index = event.log_index,
-                caller = event.caller,
+                caller = %format!("{:#x}", event.caller),
                 lhs = op.lhs,
                 rhs = op.rhs,
                 result = op.result,
@@ -257,7 +258,7 @@ fn log_event(event: &TransactionEvent) {
         Operator::Sub(op) => {
             info!(
                 log_index = event.log_index,
-                caller = event.caller,
+                caller = %format!("{:#x}", event.caller),
                 lhs = op.lhs,
                 rhs = op.rhs,
                 result = op.result,
@@ -267,7 +268,7 @@ fn log_event(event: &TransactionEvent) {
         Operator::Div(op) => {
             info!(
                 log_index = event.log_index,
-                caller = event.caller,
+                caller = %format!("{:#x}", event.caller),
                 lhs = op.lhs,
                 rhs = op.rhs,
                 result = op.result,
@@ -277,7 +278,7 @@ fn log_event(event: &TransactionEvent) {
         Operator::Select(op) => {
             info!(
                 log_index = event.log_index,
-                caller = event.caller,
+                caller = %format!("{:#x}", event.caller),
                 condition = op.condition,
                 if_true = op.if_true,
                 if_false = op.if_false,
@@ -288,7 +289,7 @@ fn log_event(event: &TransactionEvent) {
         Operator::PlaintextToEncrypted(op) => {
             info!(
                 log_index = event.log_index,
-                caller = event.caller,
+                caller = %format!("{:#x}", event.caller),
                 value = op.value,
                 value_type = op.value_type,
                 handle = op.handle,

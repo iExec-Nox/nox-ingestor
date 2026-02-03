@@ -3,6 +3,7 @@
 //! Transaction-based message grouping: one message per transaction
 //! containing all NOX events from that transaction.
 
+use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
 
 /// Handle type for encrypted values (hex-encoded bytes32)
@@ -48,7 +49,7 @@ pub enum Operator {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionEvent {
     pub log_index: u64,
-    pub caller: String,
+    pub caller: Address,
     #[serde(flatten)]
     pub operator: Operator,
 }
@@ -58,6 +59,8 @@ pub struct TransactionEvent {
 pub struct TransactionMessage {
     /// Chain ID where the events occurred
     pub chain_id: u32,
+    /// Caller address
+    pub caller: Address,
     /// Block number
     pub block_number: u64,
     /// First log index in this transaction (used for ordering)
@@ -73,6 +76,7 @@ impl TransactionMessage {
     /// Creates a new transaction message
     pub fn new(
         chain_id: u32,
+        caller: Address,
         block_number: u64,
         first_log_index: u64,
         transaction_hash: String,
@@ -80,6 +84,7 @@ impl TransactionMessage {
     ) -> Self {
         Self {
             chain_id,
+            caller,
             block_number,
             first_log_index,
             transaction_hash,

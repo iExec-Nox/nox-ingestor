@@ -180,8 +180,10 @@ impl BlockReader {
             .into_iter()
             .map(|(tx_hash, (block_number, events))| {
                 let first_log_index = events.first().map(|e| e.log_index).unwrap_or(0);
+                let caller = events.first().map(|e| e.caller).unwrap_or_default();
                 TransactionMessage::new(
                     self.chain_id,
+                    caller,
                     block_number,
                     first_log_index,
                     tx_hash,
@@ -214,7 +216,7 @@ fn to_transaction_event(
     let tx_hash = format!("{:#x}", log.transaction_hash?);
     let block_number = log.block_number?;
     let log_index = log.log_index?;
-    let caller = format!("{:#x}", event.caller());
+    let caller = event.caller();
 
     let operator = match event {
         NoxEvent::PlaintextToEncrypted(e) => Operator::PlaintextToEncrypted(EncryptionOperation {
