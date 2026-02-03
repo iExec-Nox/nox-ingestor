@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use alloy::primitives::FixedBytes;
+use alloy::primitives::{Address, FixedBytes};
 use alloy::rpc::types::Log;
 use tokio::time::sleep;
 use tracing::{debug, error, warn};
@@ -130,7 +130,8 @@ impl BlockReader {
         let logs = self.client.get_logs(start_block, end_block).await?;
 
         // Parse all logs and convert to TransactionEvent with metadata
-        let mut events: Vec<(u64, u64, String, TransactionEvent)> = logs
+        // Tuple: (block_number, log_index, tx_hash, caller, event)
+        let mut events: Vec<(u64, u64, String, Address, TransactionEvent)> = logs
             .iter()
             .filter_map(|log| {
                 let nox_event = self.parser.parse(log)?;
@@ -161,26 +162,26 @@ impl BlockReader {
     /// Returns transactions sorted by (block_number, first_log_index).
     /// Events within each transaction are sorted by log_index.
     ///
-    /// Input: Vec of (block_number, log_index, tx_hash, event)
+    /// Input: Vec of (block_number, log_index, tx_hash, caller, event)
     fn group_by_transaction(
         &self,
-        events: Vec<(u64, u64, String, TransactionEvent)>,
+        events: Vec<(u64, u64, String, Address, TransactionEvent)>,
     ) -> Vec<TransactionMessage> {
-        let mut tx_map: HashMap<String, (u64, Vec<TransactionEvent>)> = HashMap::new();
+        // Map: tx_hash -> (block_number, caller, events)
+        let mut tx_map: HashMap<String, (u64, Address, Vec<TransactionEvent>)> = HashMap::new();
 
-        for (block_number, _log_index, tx_hash, event) in events {
+        for (block_number, _log_index, tx_hash, caller, event) in events {
             tx_map
                 .entry(tx_hash)
-                .or_insert_with(|| (block_number, Vec::new()))
-                .1
+                .or_insert_with(|| (block_number, caller, Vec::new()))
+                .2
                 .push(event);
         }
 
         let mut messages: Vec<TransactionMessage> = tx_map
             .into_iter()
-            .map(|(tx_hash, (block_number, events))| {
+            .map(|(tx_hash, (block_number, caller, events))| {
                 let first_log_index = events.first().map(|e| e.log_index).unwrap_or(0);
-                let caller = events.first().map(|e| e.caller).unwrap_or_default();
                 TransactionMessage::new(
                     self.chain_id,
                     caller,
@@ -208,11 +209,11 @@ fn to_handle(bytes: FixedBytes<32>) -> String {
 }
 
 /// Convert a parsed `NoxEvent` with its source `Log` metadata into a `TransactionEvent`.
-/// Returns (block_number, log_index, tx_hash, event) or None if metadata is missing.
+/// Returns (block_number, log_index, tx_hash, caller, event) or None if metadata is missing.
 fn to_transaction_event(
     event: &NoxEvent,
     log: &Log,
-) -> Option<(u64, u64, String, TransactionEvent)> {
+) -> Option<(u64, u64, String, Address, TransactionEvent)> {
     let tx_hash = format!("{:#x}", log.transaction_hash?);
     let block_number = log.block_number?;
     let log_index = log.log_index?;
@@ -249,9 +250,8 @@ fn to_transaction_event(
 
     let event = TransactionEvent {
         log_index,
-        caller,
         operator,
     };
 
-    Some((block_number, log_index, tx_hash, event))
+    Some((block_number, log_index, tx_hash, caller, event))
 }

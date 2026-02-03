@@ -49,7 +49,6 @@ pub enum Operator {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionEvent {
     pub log_index: u64,
-    pub caller: Address,
     #[serde(flatten)]
     pub operator: Operator,
 }
