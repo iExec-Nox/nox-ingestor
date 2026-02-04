@@ -16,14 +16,14 @@ use crate::error::StateError;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedState {
     pub last_block: u64,
-    pub chain_id: u64,
+    pub chain_id: u32,
     pub updated_at: u64,
 }
 
 /// State store for tracking last synced block.
 pub struct StateStore {
     path: PathBuf,
-    chain_id: u64,
+    chain_id: u32,
     last_synced: AtomicU64,
     from_file: bool,
 }
@@ -48,7 +48,7 @@ impl StateStore {
     /// contains a different chain ID.
     pub async fn load(
         path: PathBuf,
-        chain_id: u64,
+        chain_id: u32,
         initial_block: u64,
     ) -> Result<Self, StateError> {
         // Read directly to avoid TOCTOU race condition
@@ -95,7 +95,7 @@ impl StateStore {
         }
     }
 
-    fn new_fresh(path: PathBuf, chain_id: u64, initial_block: u64) -> Self {
+    fn new_fresh(path: PathBuf, chain_id: u32, initial_block: u64) -> Self {
         Self {
             path,
             chain_id,

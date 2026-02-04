@@ -21,7 +21,7 @@ pub struct ChainConfig {
     pub contract_address: Address,
 
     /// Chain ID (default: 421614 for Arbitrum Sepolia)
-    pub chain_id: u64,
+    pub chain_id: u32,
 
     /// Number of blocks to fetch per batch (default: 50)
     pub batch_size: u64,

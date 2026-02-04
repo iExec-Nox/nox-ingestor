@@ -13,31 +13,31 @@ sol! {
     event PlaintextToEncrypted(
         address indexed caller,
         uint256 value,
-        uint8 valueType,
+        uint8 teeType,
         bytes32 handle
     );
 
     #[derive(Debug)]
     event Add(
         address indexed caller,
-        bytes32 lhs,
-        bytes32 rhs,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
         bytes32 result
     );
 
     #[derive(Debug)]
     event Sub(
         address indexed caller,
-        bytes32 lhs,
-        bytes32 rhs,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
         bytes32 result
     );
 
     #[derive(Debug)]
     event Div(
         address indexed caller,
-        bytes32 lhs,
-        bytes32 rhs,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
         bytes32 result
     );
 

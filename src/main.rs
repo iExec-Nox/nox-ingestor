@@ -2,6 +2,7 @@ pub mod application;
 pub mod chain;
 pub mod config;
 pub mod error;
+pub mod events;
 pub mod state;
 
 use tracing::error;

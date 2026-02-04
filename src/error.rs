@@ -35,5 +35,5 @@ pub enum StateError {
     Serialization(#[from] serde_json::Error),
 
     #[error("Chain ID mismatch: expected {expected}, got {actual}")]
-    ChainIdMismatch { expected: u64, actual: u64 },
+    ChainIdMismatch { expected: u32, actual: u32 },
 }
