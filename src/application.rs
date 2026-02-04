@@ -12,6 +12,7 @@ use crate::chain::{BlockReader, NoxEventParser};
 use crate::config::Config;
 use crate::error::NoxError;
 use crate::events::{Operator, TransactionEvent};
+use crate::nats::{NatsClient, Publisher};
 use crate::state::StateStore;
 
 pub struct Application {
@@ -39,6 +40,10 @@ impl Application {
             self.config.chain.retry_delay_ms,
             self.config.chain.chain_id,
         )?;
+
+        let nats_client = NatsClient::connect(&self.config.nats).await?;
+        nats_client.setup_stream(&self.config.nats).await?;
+        let publisher = Publisher::new(nats_client.jetstream(), &self.config.nats);
 
         let state_store = self.load_state_store().await?;
         let mut next_block = self.determine_start_block(&state_store)?;
@@ -120,6 +125,11 @@ impl Application {
 
                         for event in &transaction.events {
                             log_event(event);
+                        }
+                        if let Err(e) = publisher.publish(&transaction).await {
+                            // Unexpected error (not buffer full), retry after delay
+                            warn!(error = %e, "Failed to publish transaction");
+                            sleep(Duration::from_secs(1)).await;
                         }
                     }
 

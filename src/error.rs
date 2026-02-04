@@ -36,4 +36,20 @@ pub enum StateError {
 
     #[error("Chain ID mismatch: expected {expected}, got {actual}")]
     ChainIdMismatch { expected: u32, actual: u32 },
+
+    #[error("NATS error: {0}")]
+    Nats(#[from] NatsError),
+}
+
+/// NATS related errors
+#[derive(Error, Debug)]
+pub enum NatsError {
+    #[error("Connection error: {0}")]
+    Connection(String),
+
+    #[error("Publish error: {0}")]
+    Publish(String),
+
+    #[error("Stream setup error: {0}")]
+    StreamSetup(String),
 }
