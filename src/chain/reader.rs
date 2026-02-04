@@ -221,22 +221,22 @@ fn to_transaction_event(
     let operator = match event {
         NoxEvent::PlaintextToEncrypted(e) => Operator::PlaintextToEncrypted(EncryptionOperation {
             value: e.value.to_string(),
-            value_type: e.valueType,
+            tee_type: e.teeType,
             handle: to_handle(e.handle),
         }),
         NoxEvent::Add(e) => Operator::Add(BinaryOperation {
-            lhs: to_handle(e.lhs),
-            rhs: to_handle(e.rhs),
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
         NoxEvent::Sub(e) => Operator::Sub(BinaryOperation {
-            lhs: to_handle(e.lhs),
-            rhs: to_handle(e.rhs),
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
         NoxEvent::Div(e) => Operator::Div(BinaryOperation {
-            lhs: to_handle(e.lhs),
-            rhs: to_handle(e.rhs),
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
         NoxEvent::Select(e) => Operator::Select(SelectOperation {

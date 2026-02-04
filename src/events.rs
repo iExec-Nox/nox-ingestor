@@ -11,9 +11,10 @@ pub type Handle = String;
 
 /// Binary operation (add, sub, div)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BinaryOperation {
-    pub lhs: Handle,
-    pub rhs: Handle,
+    pub left_hand_operand: Handle,
+    pub right_hand_operand: Handle,
     pub result: Handle,
 }
 
@@ -30,7 +31,7 @@ pub struct SelectOperation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptionOperation {
     pub value: String,
-    pub value_type: u8,
+    pub tee_type: u8,
     pub handle: Handle,
 }
 
