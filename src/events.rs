@@ -105,6 +105,8 @@ impl TransactionMessage {
     pub fn subject(&self, base_subject: &str) -> String {
         format!("{}.{}", base_subject, self.transaction_hash)
     }
+
+    /// Converts the transaction message to bytes for NATS
     pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
         serde_json::to_vec(self)
     }
