@@ -36,8 +36,8 @@ impl Application {
             &self.config.chain.rpc_endpoint,
             parser,
             self.config.chain.batch_size,
-            self.config.chain.poll_delay_ms,
-            self.config.chain.retry_delay_ms,
+            self.config.chain.poll_delay,
+            self.config.chain.retry_delay,
             self.config.chain.chain_id,
         )?;
 
@@ -48,7 +48,7 @@ impl Application {
         let state_store = self.load_state_store().await?;
         let mut next_block = self.determine_start_block(&state_store)?;
 
-        let mut flush_interval = interval(Duration::from_secs(self.config.app.flush_interval_secs));
+        let mut flush_interval = interval(self.config.app.flush_interval);
         flush_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // Skip the immediate first tick to avoid flushing before any work is done
         flush_interval.tick().await;

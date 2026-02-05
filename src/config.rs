@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use alloy::primitives::Address;
 use config::{Config as ConfigBuilder, ConfigError, Environment};
@@ -27,11 +28,13 @@ pub struct ChainConfig {
     /// Number of blocks to fetch per batch (default: 50)
     pub batch_size: u64,
 
-    /// Delay between polls in milliseconds (default: 500)
-    pub poll_delay_ms: u64,
+    /// Delay between polls (default: "500ms")
+    #[serde(with = "humantime_serde")]
+    pub poll_delay: Duration,
 
-    /// Delay between retries in milliseconds (default: 250)
-    pub retry_delay_ms: u64,
+    /// Delay between retries (default: "250ms")
+    #[serde(with = "humantime_serde")]
+    pub retry_delay: Duration,
 }
 
 /// Application configuration
@@ -43,9 +46,11 @@ pub struct AppConfig {
     /// State file path (default: nox_ingestor_state_421614.json)
     pub state_file: String,
 
-    /// Flush interval in seconds (default: 5)
-    pub flush_interval_secs: u64,
+    /// Flush interval (default: "5s")
+    #[serde(with = "humantime_serde")]
+    pub flush_interval: Duration,
 }
+
 /// NATS JetStream configuration
 #[derive(Debug, Clone, Deserialize)]
 pub struct NatsConfig {
@@ -58,11 +63,13 @@ pub struct NatsConfig {
     /// Subject prefix for events
     pub subject: String,
 
-    /// Stream retention in seconds (default: 1 day)
-    pub retention_seconds: u64,
+    /// Stream retention (default: "1d")
+    #[serde(with = "humantime_serde")]
+    pub retention: Duration,
 
-    /// Duplicate detection window in seconds (default: 600 = 10 min)
-    pub duplicate_window_secs: u64,
+    /// Duplicate detection window (default: "10m")
+    #[serde(with = "humantime_serde")]
+    pub duplicate_window: Duration,
 }
 
 impl Config {
@@ -77,18 +84,18 @@ impl Config {
                 "0x0000000000000000000000000000000000000000",
             )?
             .set_default("chain.chain_id", 421614)?
-            .set_default("chain.poll_delay_ms", 500)?
-            .set_default("chain.retry_delay_ms", 250)?
+            .set_default("chain.poll_delay", "500ms")?
+            .set_default("chain.retry_delay", "250ms")?
             .set_default("chain.initial_block", 0)?
             .set_default("chain.batch_size", 50)?
-            .set_default("app.flush_interval_secs", 5)?
+            .set_default("app.flush_interval", "5s")?
             .set_default("app.initial_block", 0)?
             .set_default("app.state_file", "nox_ingestor_state_421614.json")?
             .set_default("nats.url", "nats://localhost:4222")?
             .set_default("nats.stream_name", "nox_ingestor")?
             .set_default("nats.subject", "nox_ingestor")?
-            .set_default("nats.retention_seconds", 86400)?
-            .set_default("nats.duplicate_window_secs", 600)?
+            .set_default("nats.retention", "1d")?
+            .set_default("nats.duplicate_window", "10m")?
             .add_source(
                 Environment::with_prefix("NOX_INGESTOR")
                     .prefix_separator("_")

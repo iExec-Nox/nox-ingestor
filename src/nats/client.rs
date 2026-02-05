@@ -3,7 +3,6 @@
 use async_nats::jetstream::{self, Context as JetStreamContext};
 use async_nats::{ConnectOptions, Event};
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::{error, info, warn};
 
 use crate::config::NatsConfig;
@@ -66,10 +65,10 @@ impl NatsClient {
             name: config.stream_name.clone(),
             subjects: vec![format!("{}.>", config.subject)],
             retention: jetstream::stream::RetentionPolicy::Limits,
-            max_age: Duration::from_secs(config.retention_seconds),
+            max_age: config.retention,
             storage: jetstream::stream::StorageType::File,
             num_replicas: 1,
-            duplicate_window: Duration::from_secs(config.duplicate_window_secs),
+            duplicate_window: config.duplicate_window,
             ..Default::default()
         };
 
@@ -80,8 +79,8 @@ impl NatsClient {
 
         info!(
             stream = config.stream_name,
-            retention_secs = config.retention_seconds,
-            duplicate_window_secs = config.duplicate_window_secs,
+            retention = config.retention.as_secs(),
+            duplicate_window = config.duplicate_window.as_secs(),
             "Stream ready"
         );
 

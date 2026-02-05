@@ -35,7 +35,7 @@ pub struct BlockReader {
     parser: NoxEventParser,
     batch_size: u64,
     poll_delay: Duration,
-    retry_delay_ms: Duration,
+    retry_delay: Duration,
     chain_id: u32,
 }
 
@@ -45,8 +45,8 @@ impl BlockReader {
         rpc_endpoint: &str,
         parser: NoxEventParser,
         batch_size: u64,
-        poll_delay_ms: u64,
-        retry_delay_ms: u64,
+        poll_delay: Duration,
+        retry_delay: Duration,
         chain_id: u32,
     ) -> Result<Self, ChainError> {
         let client = ChainClient::new(
@@ -59,8 +59,8 @@ impl BlockReader {
             client,
             parser,
             batch_size,
-            poll_delay: Duration::from_millis(poll_delay_ms),
-            retry_delay_ms: Duration::from_millis(retry_delay_ms),
+            poll_delay,
+            retry_delay,
             chain_id,
         })
     }
@@ -71,8 +71,8 @@ impl BlockReader {
             match self.client.get_latest_block().await {
                 Ok(block) => return Ok(block),
                 Err(e) => {
-                    error!(error = %e, retry_delay_ms = %self.retry_delay_ms.as_millis(), "Failed to get latest block");
-                    sleep(self.retry_delay_ms).await;
+                    error!(error = %e, retry_delay_ms = %self.retry_delay.as_millis(), "Failed to get latest block");
+                    sleep(self.retry_delay).await;
                 }
             }
         }
@@ -95,10 +95,10 @@ impl BlockReader {
                     warn!(
                         error = %e,
                         start_block,
-                        retry_delay_ms = %self.retry_delay_ms.as_millis(),
+                        retry_delay_ms = %self.retry_delay.as_millis(),
                         "Failed to read batch, retrying"
                     );
-                    sleep(self.retry_delay_ms).await;
+                    sleep(self.retry_delay).await;
                 }
             }
         }
