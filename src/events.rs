@@ -3,7 +3,7 @@
 //! Transaction-based message grouping: one message per transaction
 //! containing all NOX events from that transaction.
 
-use alloy::primitives::Address;
+use alloy::primitives::{Address, keccak256};
 use serde::{Deserialize, Serialize};
 
 /// Handle type for encrypted values (hex-encoded bytes32)
@@ -92,5 +92,22 @@ impl TransactionMessage {
             transaction_hash,
             events,
         }
+    }
+
+    /// Computes a unique checksum for deduplication
+    /// Based on chain_id + tx_hash (no log_index since we group by tx)
+    pub fn compute_checksum(&self) -> String {
+        let input = format!("{}:{}", self.chain_id, self.transaction_hash);
+        keccak256(input.as_bytes()).to_string()
+    }
+
+    /// Returns the subject for the transaction message
+    pub fn subject(&self, base_subject: &str) -> String {
+        format!("{}.{}", base_subject, self.transaction_hash)
+    }
+
+    /// Converts the transaction message to bytes for NATS
+    pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        serde_json::to_vec(self)
     }
 }

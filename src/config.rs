@@ -7,21 +7,22 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub chain: ChainConfig,
     pub app: AppConfig,
+    pub chain: ChainConfig,
+    pub nats: NatsConfig,
 }
 
 /// Chain/RPC configuration
 #[derive(Debug, Deserialize)]
 pub struct ChainConfig {
+    /// Chain ID (default: 421614 for Arbitrum Sepolia)
+    pub chain_id: u32,
+
     /// RPC endpoint URL
     pub rpc_endpoint: String,
 
     /// Contract address to monitor
     pub contract_address: Address,
-
-    /// Chain ID (default: 421614 for Arbitrum Sepolia)
-    pub chain_id: u32,
 
     /// Number of blocks to fetch per batch (default: 50)
     pub batch_size: u64,
@@ -45,6 +46,24 @@ pub struct AppConfig {
     /// Flush interval in seconds (default: 5)
     pub flush_interval_secs: u64,
 }
+/// NATS JetStream configuration
+#[derive(Debug, Clone, Deserialize)]
+pub struct NatsConfig {
+    /// NATS server URL
+    pub url: String,
+
+    /// JetStream stream name
+    pub stream_name: String,
+
+    /// Subject prefix for events
+    pub subject: String,
+
+    /// Stream retention in seconds (default: 1 day)
+    pub retention_seconds: u64,
+
+    /// Duplicate detection window in seconds (default: 600 = 10 min)
+    pub duplicate_window_secs: u64,
+}
 
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
@@ -65,6 +84,11 @@ impl Config {
             .set_default("app.flush_interval_secs", 5)?
             .set_default("app.initial_block", 0)?
             .set_default("app.state_file", "nox_ingestor_state_421614.json")?
+            .set_default("nats.url", "nats://localhost:4222")?
+            .set_default("nats.stream_name", "nox_ingestor")?
+            .set_default("nats.subject", "nox_ingestor")?
+            .set_default("nats.retention_seconds", 86400)?
+            .set_default("nats.duplicate_window_secs", 600)?
             .add_source(
                 Environment::with_prefix("NOX_INGESTOR")
                     .prefix_separator("_")
