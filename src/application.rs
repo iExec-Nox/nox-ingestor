@@ -113,6 +113,12 @@ impl Application {
                         if let Err(e) = publisher.handle_state_change().await {
                             warn!(error = %e, "Error handling NATS state change");
                         }
+
+                        // After flush, if buffer is fully drained, advance persisted state
+                        // to catch up with next_block (all messages now confirmed by NATS)
+                        if publisher.is_buffer_empty() && next_block > 0 {
+                            state_store.update(next_block - 1);
+                        }
                     }
                 }
 
@@ -181,10 +187,16 @@ impl Application {
                             sleep(Duration::from_secs(1)).await;
                         }
                     }
-                    // Update state only after ALL transactions are published/buffered
+                    // Always advance next_block to avoid re-reading in this session
                     if batch.end_block >= batch.start_block {
-                        state_store.update(batch.end_block);
                         next_block = batch.end_block + 1;
+
+                        // Only update persisted state when buffer is empty (all messages ACK'd by NATS).
+                        // If buffer has messages, state stays behind so blocks are re-processed on crash.
+                        // NATS Nats-Msg-Id deduplication handles any re-delivery.
+                        if publisher.is_buffer_empty() {
+                            state_store.update(batch.end_block);
+                        }
                     }
 
                     // Only delay if we're caught up (within 1 batch of head)

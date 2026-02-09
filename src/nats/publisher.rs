@@ -153,6 +153,11 @@ impl Publisher {
         self.buffer.is_full()
     }
 
+    /// Check if buffer is empty (all messages confirmed by NATS)
+    pub fn is_buffer_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
+
     /// Get current connection state
     pub fn connection_state(&self) -> ConnectionState {
         *self.state_rx.borrow()
