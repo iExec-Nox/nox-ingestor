@@ -184,7 +184,7 @@ impl Application {
                         if let Err(e) = publisher.publish(transaction).await {
                             // Unexpected error (not buffer full), retry after delay
                             warn!(error = %e, "Failed to publish transaction");
-                            sleep(Duration::from_secs(1)).await;
+                            sleep(self.config.nats.wait_interval).await;
                         }
                     }
                     // Always advance next_block to avoid re-reading in this session
