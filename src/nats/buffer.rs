@@ -34,7 +34,7 @@ impl MessageBuffer {
     ///
     /// Returns an error if the buffer is full.
     pub fn push(&mut self, message: TransactionMessage) -> Result<(), NatsError> {
-        if self.buffer.len() >= self.capacity {
+        if self.is_full() {
             warn!(
                 capacity = self.capacity,
                 len = self.buffer.len(),
