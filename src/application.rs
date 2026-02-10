@@ -336,6 +336,16 @@ fn log_event(event: &TransactionEvent) {
                 "Sub"
             );
         }
+        Operator::Mul(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                leftHandOperand = op.left_hand_operand,
+                rightHandOperand = op.right_hand_operand,
+                result = op.result,
+                "Mul"
+            );
+        }
         Operator::Div(op) => {
             info!(
                 log_index = event.log_index,
@@ -366,6 +376,17 @@ fn log_event(event: &TransactionEvent) {
                 success = op.success,
                 result = op.result,
                 "SafeSub"
+            );
+        }
+        Operator::SafeMul(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                leftHandOperand = op.left_hand_operand,
+                rightHandOperand = op.right_hand_operand,
+                success = op.success,
+                result = op.result,
+                "SafeMul"
             );
         }
         Operator::SafeDiv(op) => {

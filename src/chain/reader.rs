@@ -249,6 +249,11 @@ fn to_transaction_event(
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
+        NoxEvent::Mul(e) => Operator::Mul(BinaryOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
         NoxEvent::Div(e) => Operator::Div(BinaryOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
@@ -261,6 +266,12 @@ fn to_transaction_event(
             result: to_handle(e.result),
         }),
         NoxEvent::SafeSub(e) => Operator::SafeSub(SafeBinaryOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            success: to_handle(e.success),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::SafeMul(e) => Operator::SafeMul(SafeBinaryOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             success: to_handle(e.success),

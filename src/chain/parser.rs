@@ -34,6 +34,14 @@ sol! {
     );
 
     #[derive(Debug)]
+    event Mul(
+        address indexed caller,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
     event Div(
         address indexed caller,
         bytes32 leftHandOperand,
@@ -52,6 +60,15 @@ sol! {
 
     #[derive(Debug)]
     event SafeSub(
+        address indexed caller,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
+        bytes32 success,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event SafeMul(
         address indexed caller,
         bytes32 leftHandOperand,
         bytes32 rightHandOperand,
@@ -84,9 +101,11 @@ pub enum NoxEvent {
     PlaintextToEncrypted(PlaintextToEncrypted),
     Add(Add),
     Sub(Sub),
+    Mul(Mul),
     Div(Div),
     SafeAdd(SafeAdd),
     SafeSub(SafeSub),
+    SafeMul(SafeMul),
     SafeDiv(SafeDiv),
     Select(Select),
 }
@@ -97,9 +116,11 @@ impl NoxEvent {
             Self::PlaintextToEncrypted(_) => "plaintext_to_encrypted",
             Self::Add(_) => "add",
             Self::Sub(_) => "sub",
+            Self::Mul(_) => "mul",
             Self::Div(_) => "div",
             Self::SafeAdd(_) => "safe_add",
             Self::SafeSub(_) => "safe_sub",
+            Self::SafeMul(_) => "safe_mul",
             Self::SafeDiv(_) => "safe_div",
             Self::Select(_) => "select",
         }
@@ -110,9 +131,11 @@ impl NoxEvent {
             Self::PlaintextToEncrypted(e) => e.caller,
             Self::Add(e) => e.caller,
             Self::Sub(e) => e.caller,
+            Self::Mul(e) => e.caller,
             Self::Div(e) => e.caller,
             Self::SafeAdd(e) => e.caller,
             Self::SafeSub(e) => e.caller,
+            Self::SafeMul(e) => e.caller,
             Self::SafeDiv(e) => e.caller,
             Self::Select(e) => e.caller,
         }
@@ -139,9 +162,11 @@ impl NoxEventParser {
             PlaintextToEncrypted::SIGNATURE_HASH,
             Add::SIGNATURE_HASH,
             Sub::SIGNATURE_HASH,
+            Mul::SIGNATURE_HASH,
             Div::SIGNATURE_HASH,
             SafeAdd::SIGNATURE_HASH,
             SafeSub::SIGNATURE_HASH,
+            SafeMul::SIGNATURE_HASH,
             SafeDiv::SIGNATURE_HASH,
             Select::SIGNATURE_HASH,
         ]
@@ -166,6 +191,9 @@ impl NoxEventParser {
             Sub::SIGNATURE_HASH => Sub::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Sub(e.data)),
+            Mul::SIGNATURE_HASH => Mul::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Mul(e.data)),
             Div::SIGNATURE_HASH => Div::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Div(e.data)),
@@ -175,6 +203,9 @@ impl NoxEventParser {
             SafeSub::SIGNATURE_HASH => SafeSub::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::SafeSub(e.data)),
+            SafeMul::SIGNATURE_HASH => SafeMul::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::SafeMul(e.data)),
             SafeDiv::SIGNATURE_HASH => SafeDiv::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::SafeDiv(e.data)),
