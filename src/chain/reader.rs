@@ -11,8 +11,8 @@ use tracing::{debug, error, warn};
 
 use crate::error::ChainError;
 use crate::events::{
-    BinaryOperation, EncryptionOperation, Operator, SelectOperation, TransactionEvent,
-    TransactionMessage,
+    BinaryOperation, EncryptionOperation, Operator, SafeBinaryOperation, SelectOperation,
+    TransactionEvent, TransactionMessage,
 };
 
 use super::NoxEventParser;
@@ -252,6 +252,24 @@ fn to_transaction_event(
         NoxEvent::Div(e) => Operator::Div(BinaryOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::SafeAdd(e) => Operator::SafeAdd(SafeBinaryOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            success: to_handle(e.success),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::SafeSub(e) => Operator::SafeSub(SafeBinaryOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            success: to_handle(e.success),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::SafeDiv(e) => Operator::SafeDiv(SafeBinaryOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            success: to_handle(e.success),
             result: to_handle(e.result),
         }),
         NoxEvent::Select(e) => Operator::Select(SelectOperation {

@@ -18,6 +18,16 @@ pub struct BinaryOperation {
     pub result: Handle,
 }
 
+/// Safe binary operation (safe_add, safe_sub, safe_div)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SafeBinaryOperation {
+    pub left_hand_operand: Handle,
+    pub right_hand_operand: Handle,
+    pub success: Handle,
+    pub result: Handle,
+}
+
 /// Select operation (conditional)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectOperation {
@@ -43,6 +53,9 @@ pub enum Operator {
     Add(BinaryOperation),
     Sub(BinaryOperation),
     Div(BinaryOperation),
+    SafeAdd(SafeBinaryOperation),
+    SafeSub(SafeBinaryOperation),
+    SafeDiv(SafeBinaryOperation),
     Select(SelectOperation),
 }
 
