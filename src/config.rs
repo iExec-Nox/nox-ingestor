@@ -70,6 +70,21 @@ pub struct NatsConfig {
     /// Duplicate detection window (default: "10m")
     #[serde(with = "humantime_serde")]
     pub duplicate_window: Duration,
+
+    /// Initial reconnect delay (default: 1s)
+    #[serde(with = "humantime_serde")]
+    pub reconnect_delay: Duration,
+
+    /// Max reconnect delay (default: 30s)
+    #[serde(with = "humantime_serde")]
+    pub max_reconnect_delay: Duration,
+
+    /// Wait interval (default: 1s)
+    #[serde(with = "humantime_serde")]
+    pub wait_interval: Duration,
+
+    /// Message buffer capacity (default: 1000)
+    pub buffer_capacity: usize,
 }
 
 impl Config {
@@ -96,6 +111,10 @@ impl Config {
             .set_default("nats.subject", "nox_ingestor")?
             .set_default("nats.retention", "1d")?
             .set_default("nats.duplicate_window", "10m")?
+            .set_default("nats.reconnect_delay", "1s")?
+            .set_default("nats.max_reconnect_delay", "30s")?
+            .set_default("nats.buffer_capacity", 1000)?
+            .set_default("nats.wait_interval", "1s")?
             .add_source(
                 Environment::with_prefix("NOX_INGESTOR")
                     .prefix_separator("_")

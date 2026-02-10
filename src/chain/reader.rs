@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use alloy::primitives::FixedBytes;
 use alloy::rpc::types::Log;
+use tokio::sync::watch;
 use tokio::time::sleep;
 use tracing::{debug, error, warn};
 
@@ -37,6 +38,7 @@ pub struct BlockReader {
     poll_delay: Duration,
     retry_delay: Duration,
     chain_id: u32,
+    pause_rx: watch::Receiver<bool>,
 }
 
 impl BlockReader {
@@ -48,6 +50,7 @@ impl BlockReader {
         poll_delay: Duration,
         retry_delay: Duration,
         chain_id: u32,
+        pause_rx: watch::Receiver<bool>,
     ) -> Result<Self, ChainError> {
         let client = ChainClient::new(
             rpc_endpoint,
@@ -62,7 +65,19 @@ impl BlockReader {
             poll_delay,
             retry_delay,
             chain_id,
+            pause_rx,
         })
+    }
+
+    /// Wait until unpaused (NATS connected)
+    pub async fn wait_until_unpaused(&mut self) {
+        while *self.pause_rx.borrow() {
+            debug!("Reader paused, waiting for NATS connection...");
+            if self.pause_rx.changed().await.is_err() {
+                // Channel closed, return
+                break;
+            }
+        }
     }
 
     /// Get the latest block number with retry

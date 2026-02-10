@@ -47,9 +47,15 @@ pub enum NatsError {
     #[error("Connection error: {0}")]
     Connection(String),
 
+    #[error("Disconnected")]
+    Disconnected,
+
     #[error("Publish error: {0}")]
     Publish(String),
 
     #[error("Stream setup error: {0}")]
     StreamSetup(String),
+
+    #[error("Buffer full: capacity {capacity}, cannot accept more messages")]
+    BufferFull { capacity: usize },
 }

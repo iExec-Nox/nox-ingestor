@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use tokio::sync::watch;
 use tokio::time::{interval, sleep, timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, info_span, warn};
@@ -28,32 +29,51 @@ impl Application {
         debug!("Starting ingestor");
         debug!("Config: {:?}", self.config);
 
+        // 1. Setup shutdown handler
         let shutdown_token = self.setup_signal_handler();
 
-        let parser = NoxEventParser::new(self.config.chain.contract_address);
+        // 2. Connect to NATS
+        let nats_client = NatsClient::connect(&self.config.nats).await?;
+        nats_client.setup_stream(&self.config.nats).await?;
 
-        let block_reader = BlockReader::new(
+        // 3. Load state store
+        let state_store = self.load_state_store().await?;
+
+        // 4. Setup pause signal for reader/publisher coordination
+        let (pause_tx, pause_rx) = watch::channel(false);
+
+        // 5. Create parser and block reader
+        let parser = NoxEventParser::new(self.config.chain.contract_address);
+        let mut block_reader = BlockReader::new(
             &self.config.chain.rpc_endpoint,
             parser,
             self.config.chain.batch_size,
             self.config.chain.poll_delay,
             self.config.chain.retry_delay,
             self.config.chain.chain_id,
+            pause_rx,
         )?;
 
-        let nats_client = NatsClient::connect(&self.config.nats).await?;
-        nats_client.setup_stream(&self.config.nats).await?;
-        let publisher = Publisher::new(nats_client.jetstream(), &self.config.nats);
+        // 6. Create publisher
+        let mut publisher = Publisher::new(
+            nats_client.jetstream(),
+            &self.config.nats,
+            nats_client.state_receiver(),
+            pause_tx,
+        );
 
-        let state_store = self.load_state_store().await?;
+        // 7. Get NATS state receiver
+        let mut nats_state_rx = nats_client.state_receiver();
+
+        // 8. Determine starting block
         let mut next_block = self.determine_start_block(&state_store)?;
 
+        // 9. Main loop
         let mut flush_interval = interval(self.config.app.flush_interval);
         flush_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // Skip the immediate first tick to avoid flushing before any work is done
         flush_interval.tick().await;
 
-        let poll_delay = block_reader.poll_delay();
         let mut needs_delay = false;
 
         loop {
@@ -65,7 +85,7 @@ impl Application {
                         info!("Shutdown signal received");
                         break;
                     }
-                    _ = sleep(poll_delay) => {
+                    _ = sleep(block_reader.poll_delay()) => {
                         needs_delay = false;
                     }
                 }
@@ -84,15 +104,37 @@ impl Application {
                     break;
                 }
 
-                // 2. Periodic state flush
+                // 2. NATS state change
+                result = nats_state_rx.changed() => {
+                    if result.is_ok() {
+                        let state = *nats_state_rx.borrow();
+                        info!(state = %state, "NATS state changed");
+
+                        if let Err(e) = publisher.handle_state_change().await {
+                            warn!(error = %e, "Error handling NATS state change");
+                        }
+
+                        // After flush, if buffer is fully drained, advance persisted state
+                        // to catch up with next_block (all messages now confirmed by NATS)
+                        if publisher.is_buffer_empty() && next_block > 0 {
+                            state_store.update(next_block - 1);
+                        }
+                    }
+                }
+
+                // 3. Periodic state flush
                 _ = flush_interval.tick() => {
                     if let Err(e) = state_store.persist().await {
                         warn!(error = %e, "Failed to persist state");
                     }
                 }
 
-                // 3. Block reading
+                // 4. Block reading and publishing
                 _ = async {
+
+                    // Wait if paused (NATS disconnected and buffer full)
+                    block_reader.wait_until_unpaused().await;
+
                     // Get latest block
                     let latest = match block_reader.get_latest_block().await {
                         Ok(b) => b,
@@ -108,12 +150,25 @@ impl Application {
                         needs_delay = true;
                         return;
                     }
-
+                    // Read batch (now returns transactions grouped by transaction)
                     let batch = block_reader
                         .read_batch_with_retry(next_block, latest)
                         .await;
 
+                    // Publish transaction messages
+                    // Each transaction becomes one NATS message
                     for transaction in batch.transactions {
+
+                        // If buffer is full, wait for NATS to reconnect before continuing
+                        while publisher.is_buffer_full() {
+                            // Wait for state change (NATS reconnect will flush buffer)
+                            sleep(self.config.nats.wait_interval).await;
+                            // Check for shutdown
+                            if shutdown_token.is_cancelled() {
+                                return;
+                            }
+                        }
+
                         let span = info_span!(
                             "transaction",
                             tx_hash = transaction.transaction_hash,
@@ -126,16 +181,22 @@ impl Application {
                         for event in &transaction.events {
                             log_event(event);
                         }
-                        if let Err(e) = publisher.publish(&transaction).await {
+                        if let Err(e) = publisher.publish(transaction).await {
                             // Unexpected error (not buffer full), retry after delay
                             warn!(error = %e, "Failed to publish transaction");
-                            sleep(Duration::from_secs(1)).await;
+                            sleep(self.config.nats.wait_interval).await;
                         }
                     }
-
+                    // Always advance next_block to avoid re-reading in this session
                     if batch.end_block >= batch.start_block {
-                        state_store.update(batch.end_block);
                         next_block = batch.end_block + 1;
+
+                        // Only update persisted state when buffer is empty (all messages ACK'd by NATS).
+                        // If buffer has messages, state stays behind so blocks are re-processed on crash.
+                        // NATS Nats-Msg-Id deduplication handles any re-delivery.
+                        if publisher.is_buffer_empty() {
+                            state_store.update(batch.end_block);
+                        }
                     }
 
                     // Only delay if we're caught up (within 1 batch of head)
