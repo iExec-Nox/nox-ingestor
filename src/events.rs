@@ -12,7 +12,7 @@ pub type Handle = String;
 /// Binary operation (add, sub, mul, div)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BinaryOperation {
+pub struct ArithmeticOperation {
     pub left_hand_operand: Handle,
     pub right_hand_operand: Handle,
     pub result: Handle,
@@ -21,7 +21,7 @@ pub struct BinaryOperation {
 /// Safe binary operation (safe_add, safe_sub, safe_mul, safe_div)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SafeBinaryOperation {
+pub struct SafeArithmeticOperation {
     pub left_hand_operand: Handle,
     pub right_hand_operand: Handle,
     pub success: Handle,
@@ -50,14 +50,14 @@ pub struct EncryptionOperation {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operator {
     PlaintextToEncrypted(EncryptionOperation),
-    Add(BinaryOperation),
-    Sub(BinaryOperation),
-    Mul(BinaryOperation),
-    Div(BinaryOperation),
-    SafeAdd(SafeBinaryOperation),
-    SafeSub(SafeBinaryOperation),
-    SafeMul(SafeBinaryOperation),
-    SafeDiv(SafeBinaryOperation),
+    Add(ArithmeticOperation),
+    Sub(ArithmeticOperation),
+    Mul(ArithmeticOperation),
+    Div(ArithmeticOperation),
+    SafeAdd(SafeArithmeticOperation),
+    SafeSub(SafeArithmeticOperation),
+    SafeMul(SafeArithmeticOperation),
+    SafeDiv(SafeArithmeticOperation),
     Select(SelectOperation),
 }
 
