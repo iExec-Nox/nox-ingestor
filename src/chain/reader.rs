@@ -283,6 +283,36 @@ fn to_transaction_event(
             success: to_handle(e.success),
             result: to_handle(e.result),
         }),
+        NoxEvent::Eq(e) => Operator::Eq(ArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::Ne(e) => Operator::Ne(ArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::Ge(e) => Operator::Ge(ArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::Gt(e) => Operator::Gt(ArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::Le(e) => Operator::Le(ArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::Lt(e) => Operator::Lt(ArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
         NoxEvent::Select(e) => Operator::Select(SelectOperation {
             condition: to_handle(e.condition),
             if_true: to_handle(e.ifTrue),
