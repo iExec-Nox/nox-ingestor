@@ -25,6 +25,9 @@ pub struct ChainConfig {
     /// Contract address to monitor
     pub contract_address: Address,
 
+    /// Initial block to start from (0 = require state file)
+    pub initial_block: u64,
+
     /// Number of blocks to fetch per batch (default: 50)
     pub batch_size: u64,
 
@@ -40,9 +43,6 @@ pub struct ChainConfig {
 /// Application configuration
 #[derive(Debug, Deserialize)]
 pub struct AppConfig {
-    /// Initial block to start from (0 = require state file)
-    pub initial_block: u64,
-
     /// State file path (default: nox_ingestor_state_421614.json)
     pub state_file: String,
 
@@ -90,6 +90,7 @@ pub struct NatsConfig {
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
         let config = ConfigBuilder::builder()
+            .set_default("chain.chain_id", 421614)?
             .set_default(
                 "chain.rpc_endpoint",
                 "https://arbitrum-sepolia-rpc.publicnode.com",
@@ -98,13 +99,11 @@ impl Config {
                 "chain.contract_address",
                 "0x0000000000000000000000000000000000000000",
             )?
-            .set_default("chain.chain_id", 421614)?
-            .set_default("chain.poll_delay", "500ms")?
-            .set_default("chain.retry_delay", "250ms")?
             .set_default("chain.initial_block", 0)?
             .set_default("chain.batch_size", 50)?
+            .set_default("chain.poll_delay", "500ms")?
+            .set_default("chain.retry_delay", "250ms")?
             .set_default("app.flush_interval", "5s")?
-            .set_default("app.initial_block", 0)?
             .set_default("app.state_file", "nox_ingestor_state_421614.json")?
             .set_default("nats.url", "nats://localhost:4222")?
             .set_default("nats.stream_name", "nox_ingestor")?
