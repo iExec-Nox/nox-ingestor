@@ -229,7 +229,7 @@ impl Application {
     /// Load state store
     async fn load_state_store(&self) -> Result<StateStore, NoxError> {
         let state_file_path = self.config.state_file_path();
-        let initial_block = self.config.app.initial_block;
+        let initial_block = self.config.chain.initial_block;
 
         info!(
             path = %state_file_path.display(),
