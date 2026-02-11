@@ -11,8 +11,9 @@ use tracing::{debug, error, warn};
 
 use crate::error::ChainError;
 use crate::events::{
-    ArithmeticOperation, BooleanOperation, EncryptionOperation, Operator, SafeArithmeticOperation,
-    SelectOperation, TransactionEvent, TransactionMessage,
+    ArithmeticOperation, BooleanOperation, BurnOperation, EncryptionOperation, MintOperation,
+    Operator, SafeArithmeticOperation, SelectOperation, TransactionEvent, TransactionMessage,
+    TransferOperation,
 };
 
 use super::NoxEventParser;
@@ -318,6 +319,30 @@ fn to_transaction_event(
             if_true: to_handle(e.ifTrue),
             if_false: to_handle(e.ifFalse),
             result: to_handle(e.result),
+        }),
+        NoxEvent::Transfer(e) => Operator::Transfer(TransferOperation {
+            balance_from: to_handle(e.balanceFrom),
+            balance_to: to_handle(e.balanceTo),
+            amount: to_handle(e.amount),
+            success: to_handle(e.success),
+            new_balance_from: to_handle(e.newBalanceFrom),
+            new_balance_to: to_handle(e.newBalanceTo),
+        }),
+        NoxEvent::Mint(e) => Operator::Mint(MintOperation {
+            balance_to: to_handle(e.balanceTo),
+            amount: to_handle(e.amount),
+            total_supply: to_handle(e.totalSupply),
+            success: to_handle(e.success),
+            new_balance_to: to_handle(e.newBalanceTo),
+            new_total_supply: to_handle(e.newTotalSupply),
+        }),
+        NoxEvent::Burn(e) => Operator::Burn(BurnOperation {
+            balance_from: to_handle(e.balanceFrom),
+            amount: to_handle(e.amount),
+            total_supply: to_handle(e.totalSupply),
+            success: to_handle(e.success),
+            new_balance_from: to_handle(e.newBalanceFrom),
+            new_total_supply: to_handle(e.newTotalSupply),
         }),
     };
 

@@ -141,6 +141,39 @@ sol! {
         bytes32 ifFalse,
         bytes32 result
     );
+
+    #[derive(Debug)]
+    event Transfer(
+        address indexed caller,
+        bytes32 balanceFrom,
+        bytes32 balanceTo,
+        bytes32 amount,
+        bytes32 success,
+        bytes32 newBalanceFrom,
+        bytes32 newBalanceTo
+    );
+
+    #[derive(Debug)]
+    event Mint(
+        address indexed caller,
+        bytes32 balanceTo,
+        bytes32 amount,
+        bytes32 totalSupply,
+        bytes32 success,
+        bytes32 newBalanceTo,
+        bytes32 newTotalSupply
+    );
+
+    #[derive(Debug)]
+    event Burn(
+        address indexed caller,
+        bytes32 balanceFrom,
+        bytes32 amount,
+        bytes32 totalSupply,
+        bytes32 success,
+        bytes32 newBalanceFrom,
+        bytes32 newTotalSupply
+    );
 }
 
 /// Parsed NOX event with strongly typed data
@@ -162,6 +195,9 @@ pub enum NoxEvent {
     Le(Le),
     Lt(Lt),
     Select(Select),
+    Transfer(Transfer),
+    Mint(Mint),
+    Burn(Burn),
 }
 
 impl NoxEvent {
@@ -183,6 +219,9 @@ impl NoxEvent {
             Self::Le(_) => "le",
             Self::Lt(_) => "lt",
             Self::Select(_) => "select",
+            Self::Transfer(_) => "transfer",
+            Self::Mint(_) => "mint",
+            Self::Burn(_) => "burn",
         }
     }
 
@@ -204,6 +243,9 @@ impl NoxEvent {
             Self::Le(e) => e.caller,
             Self::Lt(e) => e.caller,
             Self::Select(e) => e.caller,
+            Self::Transfer(e) => e.caller,
+            Self::Mint(e) => e.caller,
+            Self::Burn(e) => e.caller,
         }
     }
 }
@@ -241,6 +283,9 @@ impl NoxEventParser {
             Le::SIGNATURE_HASH,
             Lt::SIGNATURE_HASH,
             Select::SIGNATURE_HASH,
+            Transfer::SIGNATURE_HASH,
+            Mint::SIGNATURE_HASH,
+            Burn::SIGNATURE_HASH,
         ]
     }
 
@@ -302,6 +347,15 @@ impl NoxEventParser {
             Select::SIGNATURE_HASH => Select::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Select(e.data)),
+            Transfer::SIGNATURE_HASH => Transfer::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Transfer(e.data)),
+            Mint::SIGNATURE_HASH => Mint::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Mint(e.data)),
+            Burn::SIGNATURE_HASH => Burn::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Burn(e.data)),
             _ => {
                 debug!("Unknown event type: {:?}", topic0);
                 None
