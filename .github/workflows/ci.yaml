@@ -50,7 +50,7 @@ jobs:
   build-oci-image:
     name: Build OCI image
     needs: prepare
-    uses: iExecBlockchainComputing/github-actions-workflows/.github/workflows/docker-build.yml@docker-build-v2.4.0
+    uses: iExecBlockchainComputing/github-actions-workflows/.github/workflows/docker-build.yml@docker-build-v3.0.0
     with:
       image-name: docker-regis.iex.ec/nox-ingestor
       image-tag: ${{ needs.prepare.outputs.image_tag }}
@@ -59,9 +59,9 @@ jobs:
       registry: docker-regis.iex.ec
       push: true
       security-scan: true
-      security-report: "table"
+      security-report: "comment"
       hadolint: true
-      platforms: linux/amd64
+      platform: linux/amd64
     secrets:
       username: ${{ secrets.DOCKERREGIS_USERNAME }}
       password: ${{ secrets.DOCKERREGIS_PASSWORD }}
