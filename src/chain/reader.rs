@@ -11,8 +11,8 @@ use tracing::{debug, error, warn};
 
 use crate::error::ChainError;
 use crate::events::{
-    BinaryOperation, EncryptionOperation, Operator, SelectOperation, TransactionEvent,
-    TransactionMessage,
+    ArithmeticOperation, EncryptionOperation, Operator, SafeArithmeticOperation, SelectOperation,
+    TransactionEvent, TransactionMessage,
 };
 
 use super::NoxEventParser;
@@ -239,19 +239,48 @@ fn to_transaction_event(
             tee_type: e.teeType,
             handle: to_handle(e.handle),
         }),
-        NoxEvent::Add(e) => Operator::Add(BinaryOperation {
+        NoxEvent::Add(e) => Operator::Add(ArithmeticOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
-        NoxEvent::Sub(e) => Operator::Sub(BinaryOperation {
+        NoxEvent::Sub(e) => Operator::Sub(ArithmeticOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
-        NoxEvent::Div(e) => Operator::Div(BinaryOperation {
+        NoxEvent::Mul(e) => Operator::Mul(ArithmeticOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::Div(e) => Operator::Div(ArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::SafeAdd(e) => Operator::SafeAdd(SafeArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            success: to_handle(e.success),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::SafeSub(e) => Operator::SafeSub(SafeArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            success: to_handle(e.success),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::SafeMul(e) => Operator::SafeMul(SafeArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            success: to_handle(e.success),
+            result: to_handle(e.result),
+        }),
+        NoxEvent::SafeDiv(e) => Operator::SafeDiv(SafeArithmeticOperation {
+            left_hand_operand: to_handle(e.leftHandOperand),
+            right_hand_operand: to_handle(e.rightHandOperand),
+            success: to_handle(e.success),
             result: to_handle(e.result),
         }),
         NoxEvent::Select(e) => Operator::Select(SelectOperation {
