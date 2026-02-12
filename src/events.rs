@@ -39,6 +39,7 @@ pub struct BooleanOperation {
 
 /// Select operation (conditional)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SelectOperation {
     pub condition: Handle,
     pub if_true: Handle,
@@ -48,6 +49,7 @@ pub struct SelectOperation {
 
 /// Encryption operation (plaintext to encrypted)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EncryptionOperation {
     pub value: String,
     pub tee_type: u8,
@@ -78,6 +80,7 @@ pub enum Operator {
 
 /// Individual event within a transaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionEvent {
     pub log_index: u64,
     /// Caller address
@@ -88,6 +91,7 @@ pub struct TransactionEvent {
 
 /// Message format grouping events by transaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionMessage {
     /// Chain ID where the events occurred
     pub chain_id: u32,
