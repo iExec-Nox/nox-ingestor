@@ -58,7 +58,7 @@ pub struct EncryptionOperation {
 
 /// Event payload with typed variants
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operator {
     PlaintextToEncrypted(EncryptionOperation),
     Add(ArithmeticOperation),
