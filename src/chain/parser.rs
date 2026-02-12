@@ -86,6 +86,54 @@ sol! {
     );
 
     #[derive(Debug)]
+    event Eq(
+        address indexed caller,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event Ne(
+        address indexed caller,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event Ge(
+        address indexed caller,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event Gt(
+        address indexed caller,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event Le(
+        address indexed caller,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
+    event Lt(
+        address indexed caller,
+        bytes32 leftHandOperand,
+        bytes32 rightHandOperand,
+        bytes32 result
+    );
+
+    #[derive(Debug)]
     event Select(
         address indexed caller,
         bytes32 condition,
@@ -107,6 +155,12 @@ pub enum NoxEvent {
     SafeSub(SafeSub),
     SafeMul(SafeMul),
     SafeDiv(SafeDiv),
+    Eq(Eq),
+    Ne(Ne),
+    Ge(Ge),
+    Gt(Gt),
+    Le(Le),
+    Lt(Lt),
     Select(Select),
 }
 
@@ -122,6 +176,12 @@ impl NoxEvent {
             Self::SafeSub(_) => "safe_sub",
             Self::SafeMul(_) => "safe_mul",
             Self::SafeDiv(_) => "safe_div",
+            Self::Eq(_) => "eq",
+            Self::Ne(_) => "ne",
+            Self::Ge(_) => "ge",
+            Self::Gt(_) => "gt",
+            Self::Le(_) => "le",
+            Self::Lt(_) => "lt",
             Self::Select(_) => "select",
         }
     }
@@ -137,6 +197,12 @@ impl NoxEvent {
             Self::SafeSub(e) => e.caller,
             Self::SafeMul(e) => e.caller,
             Self::SafeDiv(e) => e.caller,
+            Self::Eq(e) => e.caller,
+            Self::Ne(e) => e.caller,
+            Self::Ge(e) => e.caller,
+            Self::Gt(e) => e.caller,
+            Self::Le(e) => e.caller,
+            Self::Lt(e) => e.caller,
             Self::Select(e) => e.caller,
         }
     }
@@ -168,6 +234,12 @@ impl NoxEventParser {
             SafeSub::SIGNATURE_HASH,
             SafeMul::SIGNATURE_HASH,
             SafeDiv::SIGNATURE_HASH,
+            Eq::SIGNATURE_HASH,
+            Ne::SIGNATURE_HASH,
+            Ge::SIGNATURE_HASH,
+            Gt::SIGNATURE_HASH,
+            Le::SIGNATURE_HASH,
+            Lt::SIGNATURE_HASH,
             Select::SIGNATURE_HASH,
         ]
     }
@@ -209,6 +281,24 @@ impl NoxEventParser {
             SafeDiv::SIGNATURE_HASH => SafeDiv::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::SafeDiv(e.data)),
+            Eq::SIGNATURE_HASH => Eq::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Eq(e.data)),
+            Ne::SIGNATURE_HASH => Ne::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Ne(e.data)),
+            Ge::SIGNATURE_HASH => Ge::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Ge(e.data)),
+            Gt::SIGNATURE_HASH => Gt::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Gt(e.data)),
+            Le::SIGNATURE_HASH => Le::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Le(e.data)),
+            Lt::SIGNATURE_HASH => Lt::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::Lt(e.data)),
             Select::SIGNATURE_HASH => Select::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Select(e.data)),

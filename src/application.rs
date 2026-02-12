@@ -400,6 +400,66 @@ fn log_event(event: &TransactionEvent) {
                 "SafeDiv"
             );
         }
+        Operator::Eq(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                leftHandOperand = op.left_hand_operand,
+                rightHandOperand = op.right_hand_operand,
+                result = op.result,
+                "Eq"
+            );
+        }
+        Operator::Ne(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                leftHandOperand = op.left_hand_operand,
+                rightHandOperand = op.right_hand_operand,
+                result = op.result,
+                "Ne"
+            );
+        }
+        Operator::Ge(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                leftHandOperand = op.left_hand_operand,
+                rightHandOperand = op.right_hand_operand,
+                result = op.result,
+                "Ge"
+            );
+        }
+        Operator::Gt(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                leftHandOperand = op.left_hand_operand,
+                rightHandOperand = op.right_hand_operand,
+                result = op.result,
+                "Gt"
+            );
+        }
+        Operator::Le(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                leftHandOperand = op.left_hand_operand,
+                rightHandOperand = op.right_hand_operand,
+                result = op.result,
+                "Le"
+            );
+        }
+        Operator::Lt(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                leftHandOperand = op.left_hand_operand,
+                rightHandOperand = op.right_hand_operand,
+                result = op.result,
+                "Lt"
+            );
+        }
         Operator::Select(op) => {
             info!(
                 log_index = event.log_index,

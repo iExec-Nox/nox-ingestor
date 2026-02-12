@@ -28,6 +28,15 @@ pub struct SafeArithmeticOperation {
     pub result: Handle,
 }
 
+/// Boolean operation (eq, ne, ge, gt, le, lt)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BooleanOperation {
+    pub left_hand_operand: Handle,
+    pub right_hand_operand: Handle,
+    pub result: Handle,
+}
+
 /// Select operation (conditional)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectOperation {
@@ -58,6 +67,12 @@ pub enum Operator {
     SafeSub(SafeArithmeticOperation),
     SafeMul(SafeArithmeticOperation),
     SafeDiv(SafeArithmeticOperation),
+    Eq(BooleanOperation),
+    Ne(BooleanOperation),
+    Ge(BooleanOperation),
+    Gt(BooleanOperation),
+    Le(BooleanOperation),
+    Lt(BooleanOperation),
     Select(SelectOperation),
 }
 
