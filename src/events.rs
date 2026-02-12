@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Handle type for encrypted values (hex-encoded bytes32)
 pub type Handle = String;
 
-/// Binary operation (add, sub, mul, div, eq, ne, ge, gt, le, lt)
+/// Binary operation (add, sub, mul, div)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArithmeticOperation {
@@ -25,6 +25,15 @@ pub struct SafeArithmeticOperation {
     pub left_hand_operand: Handle,
     pub right_hand_operand: Handle,
     pub success: Handle,
+    pub result: Handle,
+}
+
+/// Boolean operation (eq, ne, ge, gt, le, lt)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BooleanOperation {
+    pub left_hand_operand: Handle,
+    pub right_hand_operand: Handle,
     pub result: Handle,
 }
 
@@ -58,12 +67,12 @@ pub enum Operator {
     SafeSub(SafeArithmeticOperation),
     SafeMul(SafeArithmeticOperation),
     SafeDiv(SafeArithmeticOperation),
-    Eq(ArithmeticOperation),
-    Ne(ArithmeticOperation),
-    Ge(ArithmeticOperation),
-    Gt(ArithmeticOperation),
-    Le(ArithmeticOperation),
-    Lt(ArithmeticOperation),
+    Eq(BooleanOperation),
+    Ne(BooleanOperation),
+    Ge(BooleanOperation),
+    Gt(BooleanOperation),
+    Le(BooleanOperation),
+    Lt(BooleanOperation),
     Select(SelectOperation),
 }
 

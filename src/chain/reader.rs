@@ -11,8 +11,8 @@ use tracing::{debug, error, warn};
 
 use crate::error::ChainError;
 use crate::events::{
-    ArithmeticOperation, EncryptionOperation, Operator, SafeArithmeticOperation, SelectOperation,
-    TransactionEvent, TransactionMessage,
+    ArithmeticOperation, BooleanOperation, EncryptionOperation, Operator, SafeArithmeticOperation,
+    SelectOperation, TransactionEvent, TransactionMessage,
 };
 
 use super::NoxEventParser;
@@ -283,32 +283,32 @@ fn to_transaction_event(
             success: to_handle(e.success),
             result: to_handle(e.result),
         }),
-        NoxEvent::Eq(e) => Operator::Eq(ArithmeticOperation {
+        NoxEvent::Eq(e) => Operator::Eq(BooleanOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
-        NoxEvent::Ne(e) => Operator::Ne(ArithmeticOperation {
+        NoxEvent::Ne(e) => Operator::Ne(BooleanOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
-        NoxEvent::Ge(e) => Operator::Ge(ArithmeticOperation {
+        NoxEvent::Ge(e) => Operator::Ge(BooleanOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
-        NoxEvent::Gt(e) => Operator::Gt(ArithmeticOperation {
+        NoxEvent::Gt(e) => Operator::Gt(BooleanOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
-        NoxEvent::Le(e) => Operator::Le(ArithmeticOperation {
+        NoxEvent::Le(e) => Operator::Le(BooleanOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
         }),
-        NoxEvent::Lt(e) => Operator::Lt(ArithmeticOperation {
+        NoxEvent::Lt(e) => Operator::Lt(BooleanOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
             result: to_handle(e.result),
