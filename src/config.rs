@@ -44,7 +44,7 @@ pub struct ChainConfig {
 #[derive(Debug, Deserialize)]
 pub struct AppConfig {
     /// State file path (default: nox_ingestor_state_421614.json)
-    pub state_file: String,
+    pub state_path: String,
 
     /// Flush interval (default: "5s")
     #[serde(with = "humantime_serde")]
@@ -104,7 +104,7 @@ impl Config {
             .set_default("chain.poll_delay", "500ms")?
             .set_default("chain.retry_delay", "250ms")?
             .set_default("app.flush_interval", "5s")?
-            .set_default("app.state_file", "nox_ingestor_state_421614.json")?
+            .set_default("app.state_path", "nox_ingestor_state_421614.json")?
             .set_default("nats.url", "nats://localhost:4222")?
             .set_default("nats.stream_name", "nox_ingestor")?
             .set_default("nats.subject", "nox_ingestor")?
@@ -127,10 +127,10 @@ impl Config {
 
     /// Get the state file path, using default if not specified
     pub fn state_file_path(&self) -> PathBuf {
-        if self.app.state_file.is_empty() {
+        if self.app.state_path.is_empty() {
             PathBuf::from(format!("./nox_ingestor_state_{}.json", self.chain.chain_id))
         } else {
-            PathBuf::from(&self.app.state_file)
+            PathBuf::from(&self.app.state_path)
         }
     }
 }

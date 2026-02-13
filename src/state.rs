@@ -138,6 +138,9 @@ impl StateStore {
 
         // Write to temp file with cleanup on error
         let write_result = async {
+            if let Some(parent) = tmp_path.parent() {
+                fs::create_dir_all(parent).await?;
+            }
             let mut file = fs::File::create(&tmp_path).await?;
             file.write_all(json.as_bytes()).await?;
             file.sync_all().await?;
