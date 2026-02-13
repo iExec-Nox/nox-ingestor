@@ -471,6 +471,45 @@ fn log_event(event: &TransactionEvent) {
                 "Select"
             );
         }
+        Operator::Transfer(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                balanceFrom = op.balance_from,
+                balanceTo = op.balance_to,
+                amount = op.amount,
+                success = op.success,
+                newBalanceFrom = op.new_balance_from,
+                newBalanceTo = op.new_balance_to,
+                "Transfer"
+            );
+        }
+        Operator::Mint(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                balanceTo = op.balance_to,
+                amount = op.amount,
+                totalSupply = op.total_supply,
+                success = op.success,
+                newBalanceTo = op.new_balance_to,
+                newTotalSupply = op.new_total_supply,
+                "Mint"
+            );
+        }
+        Operator::Burn(op) => {
+            info!(
+                log_index = event.log_index,
+                caller = format!("{:#x}", event.caller),
+                balanceFrom = op.balance_from,
+                amount = op.amount,
+                totalSupply = op.total_supply,
+                success = op.success,
+                newBalanceFrom = op.new_balance_from,
+                newTotalSupply = op.new_total_supply,
+                "Burn"
+            );
+        }
         Operator::PlaintextToEncrypted(op) => {
             info!(
                 log_index = event.log_index,

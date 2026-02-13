@@ -56,6 +56,42 @@ pub struct EncryptionOperation {
     pub handle: Handle,
 }
 
+/// Transfer operation (confidential transfer between addresses)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferOperation {
+    pub balance_from: Handle,
+    pub balance_to: Handle,
+    pub amount: Handle,
+    pub success: Handle,
+    pub new_balance_from: Handle,
+    pub new_balance_to: Handle,
+}
+
+/// Mint operation (confidential minting)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MintOperation {
+    pub balance_to: Handle,
+    pub amount: Handle,
+    pub total_supply: Handle,
+    pub success: Handle,
+    pub new_balance_to: Handle,
+    pub new_total_supply: Handle,
+}
+
+/// Burn operation (confidential burning)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BurnOperation {
+    pub balance_from: Handle,
+    pub amount: Handle,
+    pub total_supply: Handle,
+    pub success: Handle,
+    pub new_balance_from: Handle,
+    pub new_total_supply: Handle,
+}
+
 /// Event payload with typed variants
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -76,6 +112,9 @@ pub enum Operator {
     Le(BooleanOperation),
     Lt(BooleanOperation),
     Select(SelectOperation),
+    Transfer(TransferOperation),
+    Mint(MintOperation),
+    Burn(BurnOperation),
 }
 
 /// Individual event within a transaction
