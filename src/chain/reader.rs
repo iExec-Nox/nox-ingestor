@@ -236,7 +236,7 @@ fn to_transaction_event(
 
     let operator = match event {
         NoxEvent::PlaintextToEncrypted(e) => Operator::PlaintextToEncrypted(EncryptionOperation {
-            value: e.value.to_string(),
+            value: to_handle(e.value),
             tee_type: e.teeType,
             handle: to_handle(e.handle),
         }),

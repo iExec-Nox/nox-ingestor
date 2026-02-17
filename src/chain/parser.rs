@@ -12,7 +12,7 @@ sol! {
     #[derive(Debug)]
     event PlaintextToEncrypted(
         address indexed caller,
-        uint256 value,
+        bytes32 value,
         uint8 teeType,
         bytes32 handle
     );
