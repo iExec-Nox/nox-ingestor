@@ -240,6 +240,11 @@ fn to_transaction_event(
             tee_type: e.teeType,
             handle: to_handle(e.handle),
         }),
+        NoxEvent::WrapPublicHandle(e) => Operator::WrapPublicHandle(EncryptionOperation {
+            value: to_handle(e.value),
+            tee_type: e.teeType,
+            handle: to_handle(e.handle),
+        }),
         NoxEvent::Add(e) => Operator::Add(ArithmeticOperation {
             left_hand_operand: to_handle(e.leftHandOperand),
             right_hand_operand: to_handle(e.rightHandOperand),
