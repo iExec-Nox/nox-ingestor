@@ -10,6 +10,8 @@ RUN cargo build --release
 
 FROM alpine:3.23 AS runtime
 
+RUN apk --no-cache upgrade
+
 # Set working directory
 WORKDIR /app
 

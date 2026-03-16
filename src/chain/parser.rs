@@ -18,6 +18,14 @@ sol! {
     );
 
     #[derive(Debug)]
+    event WrapPublicHandle(
+        address indexed caller,
+        bytes32 value,
+        uint8 teeType,
+        bytes32 handle,
+    );
+
+    #[derive(Debug)]
     event Add(
         address indexed caller,
         bytes32 leftHandOperand,
@@ -180,6 +188,7 @@ sol! {
 #[derive(Debug, Clone)]
 pub enum NoxEvent {
     PlaintextToEncrypted(PlaintextToEncrypted),
+    WrapPublicHandle(WrapPublicHandle),
     Add(Add),
     Sub(Sub),
     Mul(Mul),
@@ -201,33 +210,10 @@ pub enum NoxEvent {
 }
 
 impl NoxEvent {
-    pub fn event_type(&self) -> &'static str {
-        match self {
-            Self::PlaintextToEncrypted(_) => "plaintext_to_encrypted",
-            Self::Add(_) => "add",
-            Self::Sub(_) => "sub",
-            Self::Mul(_) => "mul",
-            Self::Div(_) => "div",
-            Self::SafeAdd(_) => "safe_add",
-            Self::SafeSub(_) => "safe_sub",
-            Self::SafeMul(_) => "safe_mul",
-            Self::SafeDiv(_) => "safe_div",
-            Self::Eq(_) => "eq",
-            Self::Ne(_) => "ne",
-            Self::Ge(_) => "ge",
-            Self::Gt(_) => "gt",
-            Self::Le(_) => "le",
-            Self::Lt(_) => "lt",
-            Self::Select(_) => "select",
-            Self::Transfer(_) => "transfer",
-            Self::Mint(_) => "mint",
-            Self::Burn(_) => "burn",
-        }
-    }
-
     pub fn caller(&self) -> Address {
         match self {
             Self::PlaintextToEncrypted(e) => e.caller,
+            Self::WrapPublicHandle(e) => e.caller,
             Self::Add(e) => e.caller,
             Self::Sub(e) => e.caller,
             Self::Mul(e) => e.caller,
@@ -268,6 +254,7 @@ impl NoxEventParser {
     pub fn event_signatures(&self) -> Vec<B256> {
         vec![
             PlaintextToEncrypted::SIGNATURE_HASH,
+            WrapPublicHandle::SIGNATURE_HASH,
             Add::SIGNATURE_HASH,
             Sub::SIGNATURE_HASH,
             Mul::SIGNATURE_HASH,
@@ -302,6 +289,9 @@ impl NoxEventParser {
             PlaintextToEncrypted::SIGNATURE_HASH => PlaintextToEncrypted::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::PlaintextToEncrypted(e.data)),
+            WrapPublicHandle::SIGNATURE_HASH => WrapPublicHandle::decode_log(&log.inner)
+                .ok()
+                .map(|e| NoxEvent::WrapPublicHandle(e.data)),
             Add::SIGNATURE_HASH => Add::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Add(e.data)),
