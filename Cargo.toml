@@ -7,6 +7,8 @@ edition = "2024"
 alloy = { version = "1.5.2", features = ["provider-http", "providers", "rpc-types", "serde", "sol-types"] }
 anyhow = "1.0.100"
 async-nats = "0.46.0"
+axum = "0.8.8"
+chrono = { version = "0.4.44", features = ["serde"] }
 config = "0.15.19"
 config-secret = "0.1.0"
 humantime-serde = "1.1.1"

@@ -1,16 +1,17 @@
-pub mod application;
-pub mod chain;
-pub mod config;
-pub mod error;
-pub mod events;
-pub mod nats;
-pub mod state;
-
 use tracing::error;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::application::Application;
 use crate::config::Config;
+
+pub mod application;
+pub mod chain;
+pub mod config;
+pub mod error;
+pub mod events;
+pub mod handlers;
+pub mod nats;
+pub mod state;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
