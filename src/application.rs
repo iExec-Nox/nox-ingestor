@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use axum::{Router, routing::get};
 use tokio::sync::watch;
 use tokio::time::{interval, sleep, timeout};
 use tokio_util::sync::CancellationToken;
@@ -13,6 +14,7 @@ use crate::chain::{BlockReader, NoxEventParser};
 use crate::config::Config;
 use crate::error::NoxError;
 use crate::events::{Operator, TransactionEvent};
+use crate::handlers;
 use crate::nats::{NatsClient, Publisher};
 use crate::state::StateStore;
 
@@ -68,7 +70,17 @@ impl Application {
         // 8. Determine starting block
         let mut next_block = self.determine_start_block(&state_store)?;
 
-        // 9. Main loop
+        // 9. TCP server
+        let app = Router::new()
+            .route("/", get(handlers::root))
+            .route("/health", get(handlers::health_check))
+            .fallback(handlers::not_found);
+        let binding_address = self.config.binding_address();
+        info!("starting TCP server listening on {binding_address}");
+        let listener = tokio::net::TcpListener::bind(binding_address).await?;
+        tokio::spawn(async move { axum::serve(listener, app).await });
+
+        // 10. Main loop
         let mut flush_interval = interval(self.config.app.flush_interval);
         flush_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // Skip the immediate first tick to avoid flushing before any work is done

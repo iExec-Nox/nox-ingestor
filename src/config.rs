@@ -11,6 +11,7 @@ pub struct Config {
     pub app: AppConfig,
     pub chain: ChainConfig,
     pub nats: NatsConfig,
+    pub server: ServerConfig,
 }
 
 /// Chain/RPC configuration
@@ -87,9 +88,17 @@ pub struct NatsConfig {
     pub buffer_capacity: usize,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+}
+
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
         let config = ConfigBuilder::builder()
+            .set_default("server.host", "127.0.0.1")?
+            .set_default("server.port", "8080")?
             .set_default("chain.chain_id", 421614)?
             .set_default(
                 "chain.rpc_endpoint",
@@ -123,6 +132,11 @@ impl Config {
             .build()?;
 
         config.try_deserialize()
+    }
+
+    /// Returns the `host:port` string used to bind the HTTP listener.
+    pub fn binding_address(&self) -> String {
+        format!("{}:{}", self.server.host, self.server.port)
     }
 
     /// Get the state file path, using default if not specified
