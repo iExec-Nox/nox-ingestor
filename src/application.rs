@@ -532,14 +532,14 @@ fn log_event(event: &TransactionEvent) {
                 "PlaintextToEncrypted"
             );
         }
-        Operator::WrapPublicHandle(op) => {
+        Operator::WrapAsPublicHandle(op) => {
             info!(
                 log_index = event.log_index,
                 caller = format!("{:#x}", event.caller),
                 value = op.value,
                 tee_type = op.tee_type,
                 handle = op.handle,
-                "WrapPublicHandle"
+                "WrapAsPublicHandle"
             )
         }
     }

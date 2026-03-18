@@ -240,7 +240,7 @@ fn to_transaction_event(
             tee_type: e.teeType,
             handle: to_handle(e.handle),
         }),
-        NoxEvent::WrapPublicHandle(e) => Operator::WrapPublicHandle(EncryptionOperation {
+        NoxEvent::WrapAsPublicHandle(e) => Operator::WrapAsPublicHandle(EncryptionOperation {
             value: to_handle(e.value),
             tee_type: e.teeType,
             handle: to_handle(e.handle),
