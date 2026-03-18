@@ -18,7 +18,7 @@ sol! {
     );
 
     #[derive(Debug)]
-    event WrapPublicHandle(
+    event WrapAsPublicHandle(
         address indexed caller,
         bytes32 value,
         uint8 teeType,
@@ -188,7 +188,7 @@ sol! {
 #[derive(Debug, Clone)]
 pub enum NoxEvent {
     PlaintextToEncrypted(PlaintextToEncrypted),
-    WrapPublicHandle(WrapPublicHandle),
+    WrapAsPublicHandle(WrapAsPublicHandle),
     Add(Add),
     Sub(Sub),
     Mul(Mul),
@@ -213,7 +213,7 @@ impl NoxEvent {
     pub fn caller(&self) -> Address {
         match self {
             Self::PlaintextToEncrypted(e) => e.caller,
-            Self::WrapPublicHandle(e) => e.caller,
+            Self::WrapAsPublicHandle(e) => e.caller,
             Self::Add(e) => e.caller,
             Self::Sub(e) => e.caller,
             Self::Mul(e) => e.caller,
@@ -254,7 +254,7 @@ impl NoxEventParser {
     pub fn event_signatures(&self) -> Vec<B256> {
         vec![
             PlaintextToEncrypted::SIGNATURE_HASH,
-            WrapPublicHandle::SIGNATURE_HASH,
+            WrapAsPublicHandle::SIGNATURE_HASH,
             Add::SIGNATURE_HASH,
             Sub::SIGNATURE_HASH,
             Mul::SIGNATURE_HASH,
@@ -289,9 +289,9 @@ impl NoxEventParser {
             PlaintextToEncrypted::SIGNATURE_HASH => PlaintextToEncrypted::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::PlaintextToEncrypted(e.data)),
-            WrapPublicHandle::SIGNATURE_HASH => WrapPublicHandle::decode_log(&log.inner)
+            WrapAsPublicHandle::SIGNATURE_HASH => WrapAsPublicHandle::decode_log(&log.inner)
                 .ok()
-                .map(|e| NoxEvent::WrapPublicHandle(e.data)),
+                .map(|e| NoxEvent::WrapAsPublicHandle(e.data)),
             Add::SIGNATURE_HASH => Add::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::Add(e.data)),

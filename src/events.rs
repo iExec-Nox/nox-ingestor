@@ -97,7 +97,7 @@ pub struct BurnOperation {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operator {
     PlaintextToEncrypted(EncryptionOperation),
-    WrapPublicHandle(EncryptionOperation),
+    WrapAsPublicHandle(EncryptionOperation),
     Add(ArithmeticOperation),
     Sub(ArithmeticOperation),
     Mul(ArithmeticOperation),
