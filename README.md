@@ -1,4 +1,4 @@
-# nox-ingestor
+# Nox Ingestor
 
 Nox events listener. 🦀
 
