@@ -2,6 +2,7 @@
 name = "nox-ingestor"
 version = "0.1.0"
 edition = "2024"
+license = "BUSL-1.1"
 
 [dependencies]
 alloy = { version = "1.5.2", features = ["provider-http", "providers", "rpc-types", "serde", "sol-types"] }
