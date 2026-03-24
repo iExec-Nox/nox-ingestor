@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use axum::{Router, routing::get};
+use axum_prometheus::{Handle, MakeDefaultHandle, PrometheusMetricLayerBuilder};
 use tokio::sync::watch;
 use tokio::time::{interval, sleep, timeout};
 use tokio_util::sync::CancellationToken;
@@ -71,10 +72,18 @@ impl Application {
         let mut next_block = self.determine_start_block(&state_store)?;
 
         // 9. TCP server
+        let prometheus_layer = PrometheusMetricLayerBuilder::new()
+            .with_allow_patterns(&["/", "/health", "/metrics"])
+            .build();
+        let metrics_handle = Handle::make_default_handle(Handle::default());
+
         let app = Router::new()
             .route("/", get(handlers::root))
             .route("/health", get(handlers::health_check))
-            .fallback(handlers::not_found);
+            .route("/metrics", get(handlers::metrics))
+            .fallback(handlers::not_found)
+            .layer(prometheus_layer)
+            .with_state(metrics_handle);
         let binding_address = self.config.binding_address();
         info!("starting TCP server listening on {binding_address}");
         let listener = tokio::net::TcpListener::bind(binding_address).await?;
