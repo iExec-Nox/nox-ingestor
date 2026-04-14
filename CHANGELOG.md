@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/iExec-Nox/nox-ingestor/compare/v0.5.0...v0.5.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* PlaintextToEncrypted event has been removed from NoxCompute ([#31](https://github.com/iExec-Nox/nox-ingestor/issues/31)) ([eb06122](https://github.com/iExec-Nox/nox-ingestor/commit/eb0612237d14707e84a410e443665cc8d1896456))
+
 ## [0.5.0](https://github.com/iExec-Nox/nox-ingestor/compare/v0.4.0...v0.5.0) (2026-03-27)
 
 
