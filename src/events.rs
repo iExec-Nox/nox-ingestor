@@ -96,7 +96,6 @@ pub struct BurnOperation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Operator {
-    PlaintextToEncrypted(EncryptionOperation),
     WrapAsPublicHandle(EncryptionOperation),
     Add(ArithmeticOperation),
     Sub(ArithmeticOperation),

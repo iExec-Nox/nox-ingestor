@@ -10,14 +10,6 @@ use tracing::debug;
 // Signatures are computed at compile-time as constants
 sol! {
     #[derive(Debug)]
-    event PlaintextToEncrypted(
-        address indexed caller,
-        bytes32 value,
-        uint8 teeType,
-        bytes32 handle
-    );
-
-    #[derive(Debug)]
     event WrapAsPublicHandle(
         address indexed caller,
         bytes32 value,
@@ -187,7 +179,6 @@ sol! {
 /// Parsed NOX event with strongly typed data
 #[derive(Debug, Clone)]
 pub enum NoxEvent {
-    PlaintextToEncrypted(PlaintextToEncrypted),
     WrapAsPublicHandle(WrapAsPublicHandle),
     Add(Add),
     Sub(Sub),
@@ -212,7 +203,6 @@ pub enum NoxEvent {
 impl NoxEvent {
     pub fn caller(&self) -> Address {
         match self {
-            Self::PlaintextToEncrypted(e) => e.caller,
             Self::WrapAsPublicHandle(e) => e.caller,
             Self::Add(e) => e.caller,
             Self::Sub(e) => e.caller,
@@ -253,7 +243,6 @@ impl NoxEventParser {
     /// Get all event signatures to filter (compile-time constants)
     pub fn event_signatures(&self) -> Vec<B256> {
         vec![
-            PlaintextToEncrypted::SIGNATURE_HASH,
             WrapAsPublicHandle::SIGNATURE_HASH,
             Add::SIGNATURE_HASH,
             Sub::SIGNATURE_HASH,
@@ -286,9 +275,6 @@ impl NoxEventParser {
         let topic0 = topics[0];
 
         let event = match topic0 {
-            PlaintextToEncrypted::SIGNATURE_HASH => PlaintextToEncrypted::decode_log(&log.inner)
-                .ok()
-                .map(|e| NoxEvent::PlaintextToEncrypted(e.data)),
             WrapAsPublicHandle::SIGNATURE_HASH => WrapAsPublicHandle::decode_log(&log.inner)
                 .ok()
                 .map(|e| NoxEvent::WrapAsPublicHandle(e.data)),
