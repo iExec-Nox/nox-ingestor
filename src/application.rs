@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use axum::{Router, routing::get};
-use axum_prometheus::{Handle, MakeDefaultHandle, PrometheusMetricLayerBuilder};
+use axum_prometheus::{Handle, MakeDefaultHandle, PrometheusMetricLayerBuilder, metrics::counter};
 use tokio::sync::watch;
 use tokio::time::{interval, sleep, timeout};
 use tokio_util::sync::CancellationToken;
@@ -165,6 +165,7 @@ impl Application {
                             return;
                         }
                     };
+                    counter!("nox_ingestor.chain.block_number", "chain_id" => self.config.chain.chain_id.to_string(), "type" => "latest").absolute(latest);
 
                     // Check if we need to wait for new blocks
                     if next_block > latest {
@@ -175,6 +176,7 @@ impl Application {
                     let batch = block_reader
                         .read_batch_with_retry(next_block, latest)
                         .await;
+                    counter!("nox_ingestor.chain.block_number", "chain_id" => self.config.chain.chain_id.to_string(), "type" => "parsed").absolute(batch.end_block);
 
                     // Publish transaction messages
                     // Each transaction becomes one NATS message
@@ -190,6 +192,7 @@ impl Application {
                             }
                         }
 
+                        let tx_block_number = transaction.block_number;
                         let span = info_span!(
                             "transaction",
                             tx_hash = transaction.transaction_hash,
@@ -207,6 +210,7 @@ impl Application {
                             warn!(error = %e, "Failed to publish transaction");
                             sleep(self.config.nats.wait_interval).await;
                         }
+                        counter!("nox_ingestor.chain.block_number", "chain_id" => self.config.chain.chain_id.to_string(), "type" => "published").absolute(tx_block_number);
                     }
                     // Always advance next_block to avoid re-reading in this session
                     if batch.end_block >= batch.start_block {
