@@ -2855,6 +2855,7 @@ dependencies = [
  "config",
  "config-secret",
  "humantime-serde",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror",

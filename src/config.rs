@@ -6,6 +6,17 @@ use config::{Config as ConfigBuilder, ConfigError, Environment};
 use config_secret::EnvironmentSecretFile;
 use serde::Deserialize;
 
+/// TLS certificate configuration for mTLS client authentication
+#[derive(Debug, Clone, Deserialize)]
+pub struct TlsConfig {
+    /// CA certificate path (`NOX_INGESTOR_NATS__TLS__CA_PATH`)
+    pub ca_path: PathBuf,
+    /// Client certificate path (`NOX_INGESTOR_NATS__TLS__CERT_PATH`)
+    pub cert_path: PathBuf,
+    /// Client private key path (`NOX_INGESTOR_NATS__TLS__KEY_PATH`)
+    pub key_path: PathBuf,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub app: AppConfig,
@@ -55,8 +66,14 @@ pub struct AppConfig {
 /// NATS JetStream configuration
 #[derive(Debug, Clone, Deserialize)]
 pub struct NatsConfig {
-    /// NATS server URL
-    pub url: String,
+    /// NATS server URLs (`NOX_INGESTOR_NATS__URLS`, comma-separated)
+    pub urls: Vec<String>,
+
+    /// TLS client certificate configuration
+    pub tls: TlsConfig,
+
+    /// JetStream stream replica count (`NOX_INGESTOR_NATS__NUM_REPLICAS`, default `3`)
+    pub num_replicas: u32,
 
     /// JetStream stream name
     pub stream_name: String,
@@ -114,7 +131,7 @@ impl Config {
             .set_default("chain.retry_delay", "250ms")?
             .set_default("app.flush_interval", "5s")?
             .set_default("app.state_path", "nox_ingestor_state_421614.json")?
-            .set_default("nats.url", "nats://localhost:4222")?
+            .set_default("nats.num_replicas", 3)?
             .set_default("nats.stream_name", "nox_ingestor")?
             .set_default("nats.subject", "nox_ingestor")?
             .set_default("nats.retention", "1d")?
@@ -126,7 +143,10 @@ impl Config {
             .add_source(
                 Environment::with_prefix("NOX_INGESTOR")
                     .prefix_separator("_")
-                    .separator("__"),
+                    .separator("__")
+                    .list_separator(",")
+                    .with_list_parse_key("nats.urls")
+                    .try_parsing(true),
             )
             .add_source(EnvironmentSecretFile::with_prefix("NOX_INGESTOR").separator("_"))
             .build()?;

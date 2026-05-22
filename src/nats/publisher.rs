@@ -2,6 +2,7 @@
 
 use async_nats::HeaderMap;
 use async_nats::jetstream::Context as JetStreamContext;
+use axum_prometheus::metrics::counter;
 use std::sync::Arc;
 use tokio::sync::watch;
 use tracing::{debug, error, info, warn};
@@ -163,6 +164,33 @@ impl Publisher {
         *self.state_rx.borrow()
     }
 
+    /// Attempt to drain the buffer if currently connected.
+    ///
+    /// Covers the case where JetStream quorum was lost without a TCP disconnect:
+    /// `ConnectionState` never transitions, so `handle_state_change` is never
+    /// triggered. The periodic tick calls this to drain the buffer on recovery.
+    ///
+    /// Returns `Ok(true)` if buffer was non-empty and fully drained.
+    /// Returns `Ok(false)` if buffer was already empty or state is not Connected.
+    /// Returns `Err` if the flush attempt failed.
+    pub async fn try_resume_if_connected(&mut self) -> Result<bool, NatsError> {
+        if *self.state_rx.borrow() != ConnectionState::Connected {
+            return Ok(false);
+        }
+        if self.buffer.is_empty() {
+            return Ok(false);
+        }
+        self.flush_buffer().await?;
+        if self.buffer.is_empty() {
+            let _ = self.pause_tx.send(false);
+            Ok(true)
+        } else {
+            Err(NatsError::Publish(
+                "Buffer not fully drained after flush".to_string(),
+            ))
+        }
+    }
+
     /// Publish a transaction message to JetStream
     async fn do_publish(&self, message: &TransactionMessage) -> Result<(), NatsError> {
         let subject = message.subject(&self.subject_prefix);
@@ -174,13 +202,30 @@ impl Publisher {
         let mut headers = HeaderMap::new();
         headers.insert("Nats-Msg-Id", message.compute_checksum().as_str());
 
-        let ack = self
+        let publish_future = self
             .jetstream
             .publish_with_headers(subject.clone(), headers, payload.into())
-            .await
-            .map_err(|e| NatsError::Publish(format!("Publish error: {}", e)))?
-            .await
-            .map_err(|e| NatsError::Publish(format!("Ack error: {}", e)))?;
+            .await;
+
+        let ack_future = match publish_future {
+            Ok(fut) => fut,
+            Err(e) => {
+                counter!("nox_ingestor.nats.publish_retries_total", "outcome" => "err")
+                    .increment(1);
+                return Err(NatsError::Publish(format!("Publish error: {}", e)));
+            }
+        };
+
+        let ack = match ack_future.await {
+            Ok(ack) => ack,
+            Err(e) => {
+                counter!("nox_ingestor.nats.publish_retries_total", "outcome" => "err")
+                    .increment(1);
+                return Err(NatsError::Publish(format!("Ack error: {}", e)));
+            }
+        };
+
+        counter!("nox_ingestor.nats.publish_retries_total", "outcome" => "ok").increment(1);
 
         debug!(
             subject,

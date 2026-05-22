@@ -5,5 +5,5 @@ mod client;
 mod publisher;
 
 pub use buffer::MessageBuffer;
-pub use client::NatsClient;
+pub use client::{ConnectionState, NatsClient};
 pub use publisher::Publisher;

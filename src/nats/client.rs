@@ -37,6 +37,20 @@ impl NatsClient {
         let (state_tx, state_rx) = watch::channel(ConnectionState::Disconnected);
 
         let state_tx_clone = state_tx.clone();
+
+        for (label, path) in [
+            ("ca", &config.tls.ca_path),
+            ("cert", &config.tls.cert_path),
+            ("key", &config.tls.key_path),
+        ] {
+            if !path.is_file() {
+                return Err(NatsError::Tls(format!(
+                    "{label} path is not a regular file: {}",
+                    path.display()
+                )));
+            }
+        }
+
         let options = ConnectOptions::new()
             .event_callback(move |event| {
                 let state_tx = state_tx_clone.clone();
@@ -50,31 +64,33 @@ impl NatsClient {
                             warn!("NATS disconnected");
                             let _ = state_tx.send(ConnectionState::Disconnected);
                         }
-                        Event::ServerError(err) => {
-                            error!(error = %err, "NATS server error");
-                        }
-                        Event::ClientError(err) => {
-                            error!(error = %err, "NATS client error");
-                        }
-                        Event::LameDuckMode => {
-                            warn!("NATS server in lame duck mode");
-                        }
+                        Event::ServerError(err) => error!(error = %err, "NATS server error"),
+                        Event::ClientError(err) => error!(error = %err, "NATS client error"),
+                        Event::LameDuckMode => warn!("NATS server in lame duck mode"),
                         Event::SlowConsumer(sid) => {
-                            warn!(subscription_id = sid, "NATS slow consumer");
+                            warn!(subscription_id = sid, "NATS slow consumer")
                         }
                         _ => {}
                     }
                 }
             })
+            .add_root_certificates(config.tls.ca_path.clone())
+            .add_client_certificate(config.tls.cert_path.clone(), config.tls.key_path.clone())
+            .require_tls(true)
             .retry_on_initial_connect();
 
-        info!(url = config.url, "Connecting to NATS...");
+        info!(
+            urls = ?config.urls,
+            "Connecting to NATS cluster via mTLS"
+        );
 
-        let client = options.connect(&config.url).await.map_err(|e| {
-            NatsError::Connection(format!("Failed to connect to {}: {}", config.url, e))
+        let client = options.connect(&config.urls[..]).await.map_err(|e| {
+            NatsError::Connection(format!(
+                "Failed to connect to NATS cluster {:?}: {}",
+                config.urls, e
+            ))
         })?;
 
-        // Mark as connected
         let _ = state_tx.send(ConnectionState::Connected);
 
         let jetstream = jetstream::new(client.clone());
@@ -91,30 +107,60 @@ impl NatsClient {
     pub async fn setup_stream(&self, config: &NatsConfig) -> Result<(), NatsError> {
         info!(stream = config.stream_name, "Setting up JetStream stream");
 
-        let stream_config = jetstream::stream::Config {
+        let configured = config.num_replicas as usize;
+        let desired_config = jetstream::stream::Config {
             name: config.stream_name.clone(),
             subjects: vec![format!("{}.>", config.subject)],
             retention: jetstream::stream::RetentionPolicy::Limits,
             max_age: config.retention,
             storage: jetstream::stream::StorageType::File,
-            num_replicas: 1,
+            num_replicas: configured,
             duplicate_window: config.duplicate_window,
             ..Default::default()
         };
 
-        self.jetstream
-            .get_or_create_stream(stream_config)
-            .await
-            .map_err(|e| NatsError::StreamSetup(format!("Failed to setup stream: {}", e)))?;
-
-        info!(
-            stream = config.stream_name,
-            retention = config.retention.as_secs(),
-            duplicate_window = config.duplicate_window.as_secs(),
-            "Stream ready"
-        );
-
-        Ok(())
+        match self.jetstream.get_stream(&config.stream_name).await {
+            Ok(stream) => {
+                let stored = stream.cached_info().config.num_replicas;
+                if stored != configured {
+                    warn!(
+                        stored,
+                        configured,
+                        stream = config.stream_name,
+                        "JetStream stream replica count mismatch — admin (ops) must update online via `nats stream update --replicas={configured}` with a privileged identity"
+                    );
+                } else {
+                    info!(
+                        stream = config.stream_name,
+                        replicas = stored,
+                        "Stream already exists with correct replica count"
+                    );
+                }
+                Ok(())
+            }
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    jetstream::context::GetStreamErrorKind::JetStream(ref js_err)
+                    if js_err.error_code() == jetstream::ErrorCode::STREAM_NOT_FOUND
+                ) =>
+            {
+                self.jetstream
+                    .create_stream(desired_config)
+                    .await
+                    .map_err(|e| NatsError::StreamSetup(format!("Failed to create stream: {e}")))?;
+                info!(
+                    stream = config.stream_name,
+                    replicas = configured,
+                    "Stream created"
+                );
+                Ok(())
+            }
+            Err(e) => Err(NatsError::StreamSetup(format!(
+                "Failed to query stream {}: {e}",
+                config.stream_name
+            ))),
+        }
     }
 
     /// Get the JetStream context
