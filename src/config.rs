@@ -6,15 +6,21 @@ use config::{Config as ConfigBuilder, ConfigError, Environment};
 use config_secret::EnvironmentSecretFile;
 use serde::Deserialize;
 
-/// TLS certificate configuration for mTLS client authentication
+/// TLS certificate configuration for mTLS client authentication.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TlsConfig {
-    /// CA certificate path (`NOX_INGESTOR_NATS__TLS__CA_PATH`)
-    pub ca_path: PathBuf,
-    /// Client certificate path (`NOX_INGESTOR_NATS__TLS__CERT_PATH`)
-    pub cert_path: PathBuf,
-    /// Client private key path (`NOX_INGESTOR_NATS__TLS__KEY_PATH`)
-    pub key_path: PathBuf,
+    /// Whether mTLS is enabled (`NOX_INGESTOR_NATS__TLS__ENABLED`, default `true`).
+    /// Set to `false` for dev / Tenderly VM to connect to a plain NATS server.
+    pub enabled: bool,
+    /// CA certificate PEM content (`NOX_INGESTOR_NATS__TLS__CA`). Required when `enabled`.
+    #[serde(default)]
+    pub ca: String,
+    /// Client certificate PEM content (`NOX_INGESTOR_NATS__TLS__CERT`). Required when `enabled`.
+    #[serde(default)]
+    pub cert: String,
+    /// Client private key PEM content (`NOX_INGESTOR_NATS__TLS__KEY`). Required when `enabled`.
+    #[serde(default)]
+    pub key: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,6 +137,10 @@ impl Config {
             .set_default("chain.retry_delay", "250ms")?
             .set_default("app.flush_interval", "5s")?
             .set_default("app.state_path", "nox_ingestor_state_421614.json")?
+            .set_default("nats.tls.enabled", true)?
+            .set_default("nats.tls.ca", "")?
+            .set_default("nats.tls.cert", "")?
+            .set_default("nats.tls.key", "")?
             .set_default("nats.num_replicas", 3)?
             .set_default("nats.stream_name", "nox_ingestor")?
             .set_default("nats.subject", "nox_ingestor")?

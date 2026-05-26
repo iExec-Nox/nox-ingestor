@@ -2,11 +2,13 @@
 
 use async_nats::jetstream::{self, Context as JetStreamContext};
 use async_nats::{ConnectOptions, Event};
+use rustls::RootCertStore;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use std::sync::Arc;
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 
-use crate::config::NatsConfig;
+use crate::config::{NatsConfig, TlsConfig};
 use crate::error::NatsError;
 
 /// Connection state for NATS client
@@ -38,20 +40,7 @@ impl NatsClient {
 
         let state_tx_clone = state_tx.clone();
 
-        for (label, path) in [
-            ("ca", &config.tls.ca_path),
-            ("cert", &config.tls.cert_path),
-            ("key", &config.tls.key_path),
-        ] {
-            if !path.is_file() {
-                return Err(NatsError::Tls(format!(
-                    "{label} path is not a regular file: {}",
-                    path.display()
-                )));
-            }
-        }
-
-        let options = ConnectOptions::new()
+        let mut options = ConnectOptions::new()
             .event_callback(move |event| {
                 let state_tx = state_tx_clone.clone();
                 async move {
@@ -74,14 +63,17 @@ impl NatsClient {
                     }
                 }
             })
-            .add_root_certificates(config.tls.ca_path.clone())
-            .add_client_certificate(config.tls.cert_path.clone(), config.tls.key_path.clone())
-            .require_tls(true)
             .retry_on_initial_connect();
+
+        if config.tls.enabled {
+            let tls_config = build_rustls_client_config(&config.tls)?;
+            options = options.require_tls(true).tls_client_config(tls_config);
+        }
 
         info!(
             urls = ?config.urls,
-            "Connecting to NATS cluster via mTLS"
+            tls = config.tls.enabled,
+            "Connecting to NATS"
         );
 
         let client = options.connect(&config.urls[..]).await.map_err(|e| {
@@ -182,4 +174,47 @@ impl NatsClient {
     pub fn is_connected(&self) -> bool {
         self.state() == ConnectionState::Connected
     }
+}
+
+/// Build an in-memory rustls `ClientConfig` from PEM strings supplied via env vars.
+fn build_rustls_client_config(tls: &TlsConfig) -> Result<rustls::ClientConfig, NatsError> {
+    for (label, value) in [("ca", &tls.ca), ("cert", &tls.cert), ("key", &tls.key)] {
+        if value.trim().is_empty() {
+            return Err(NatsError::Tls(format!(
+                "TLS enabled but `{label}` PEM content is empty (set NOX_INGESTOR_NATS__TLS__{} env var)",
+                label.to_uppercase()
+            )));
+        }
+    }
+
+    let mut roots = RootCertStore::empty();
+    for cert in CertificateDer::pem_slice_iter(tls.ca.as_bytes()) {
+        let cert = cert.map_err(|e| NatsError::Tls(format!("Failed to parse CA PEM: {e}")))?;
+        roots
+            .add(cert)
+            .map_err(|e| NatsError::Tls(format!("Failed to add CA cert to root store: {e}")))?;
+    }
+    if roots.is_empty() {
+        return Err(NatsError::Tls(
+            "No CA certificates found in PEM content".to_string(),
+        ));
+    }
+
+    let cert_chain: Vec<CertificateDer<'static>> =
+        CertificateDer::pem_slice_iter(tls.cert.as_bytes())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| NatsError::Tls(format!("Failed to parse client cert PEM: {e}")))?;
+    if cert_chain.is_empty() {
+        return Err(NatsError::Tls(
+            "No client certificates found in PEM content".to_string(),
+        ));
+    }
+
+    let key = PrivateKeyDer::from_pem_slice(tls.key.as_bytes())
+        .map_err(|e| NatsError::Tls(format!("Failed to parse client key PEM: {e}")))?;
+
+    rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_client_auth_cert(cert_chain, key)
+        .map_err(|e| NatsError::Tls(format!("Failed to build rustls client config: {e}")))
 }
