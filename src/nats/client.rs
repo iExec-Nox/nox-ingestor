@@ -1,9 +1,10 @@
 //! NATS client with JetStream support
 
 use async_nats::jetstream::{self, Context as JetStreamContext};
+use async_nats::rustls::pki_types::pem::PemObject;
+use async_nats::rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use async_nats::rustls::{ClientConfig, RootCertStore};
 use async_nats::{ConnectOptions, Event};
-use rustls::RootCertStore;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use std::sync::Arc;
 use tokio::sync::watch;
 use tracing::{error, info, warn};
@@ -177,7 +178,7 @@ impl NatsClient {
 }
 
 /// Build an in-memory rustls `ClientConfig` from PEM strings supplied via env vars.
-fn build_rustls_client_config(tls: &TlsConfig) -> Result<rustls::ClientConfig, NatsError> {
+fn build_rustls_client_config(tls: &TlsConfig) -> Result<ClientConfig, NatsError> {
     for (label, value) in [("ca", &tls.ca), ("cert", &tls.cert), ("key", &tls.key)] {
         if value.trim().is_empty() {
             return Err(NatsError::Tls(format!(
@@ -213,7 +214,7 @@ fn build_rustls_client_config(tls: &TlsConfig) -> Result<rustls::ClientConfig, N
     let key = PrivateKeyDer::from_pem_slice(tls.key.as_bytes())
         .map_err(|e| NatsError::Tls(format!("Failed to parse client key PEM: {e}")))?;
 
-    rustls::ClientConfig::builder()
+    ClientConfig::builder()
         .with_root_certificates(roots)
         .with_client_auth_cert(cert_chain, key)
         .map_err(|e| NatsError::Tls(format!("Failed to build rustls client config: {e}")))
