@@ -181,14 +181,8 @@ impl Publisher {
             return Ok(false);
         }
         self.flush_buffer().await?;
-        if self.buffer.is_empty() {
-            let _ = self.pause_tx.send(false);
-            Ok(true)
-        } else {
-            Err(NatsError::Publish(
-                "Buffer not fully drained after flush".to_string(),
-            ))
-        }
+        let _ = self.pause_tx.send(false);
+        Ok(true)
     }
 
     /// Publish a transaction message to JetStream
@@ -199,8 +193,9 @@ impl Publisher {
             .map_err(|e| NatsError::Publish(format!("Serialization error: {}", e)))?;
 
         // Use checksum as Nats-Msg-Id for deduplication
+        let checksum = message.compute_checksum();
         let mut headers = HeaderMap::new();
-        headers.insert("Nats-Msg-Id", message.compute_checksum().as_str());
+        headers.insert("Nats-Msg-Id", checksum.as_str());
 
         let publish_future = self
             .jetstream
@@ -210,8 +205,7 @@ impl Publisher {
         let ack_future = match publish_future {
             Ok(fut) => fut,
             Err(e) => {
-                counter!("nox_ingestor.nats.publish_retries_total", "outcome" => "err")
-                    .increment(1);
+                counter!("nox_ingestor.nats.publishes_total", "outcome" => "err").increment(1);
                 return Err(NatsError::Publish(format!("Publish error: {}", e)));
             }
         };
@@ -219,17 +213,16 @@ impl Publisher {
         let ack = match ack_future.await {
             Ok(ack) => ack,
             Err(e) => {
-                counter!("nox_ingestor.nats.publish_retries_total", "outcome" => "err")
-                    .increment(1);
+                counter!("nox_ingestor.nats.publishes_total", "outcome" => "err").increment(1);
                 return Err(NatsError::Publish(format!("Ack error: {}", e)));
             }
         };
 
-        counter!("nox_ingestor.nats.publish_retries_total", "outcome" => "ok").increment(1);
+        counter!("nox_ingestor.nats.publishes_total", "outcome" => "ok").increment(1);
 
         debug!(
             subject,
-            checksum = message.compute_checksum(),
+            checksum,
             event_count = message.events.len(),
             seq = ack.sequence,
             duplicate = ack.duplicate,

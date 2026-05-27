@@ -96,8 +96,8 @@ impl Application {
         gauge!("nox_ingestor.nats.connection_state").set(0.0);
         counter!("nox_ingestor.nats.reconnects_total").absolute(0);
         gauge!("nox_ingestor.nats.buffer_len").set(0.0);
-        counter!("nox_ingestor.nats.publish_retries_total", "outcome" => "ok").absolute(0);
-        counter!("nox_ingestor.nats.publish_retries_total", "outcome" => "err").absolute(0);
+        counter!("nox_ingestor.nats.publishes_total", "outcome" => "ok").absolute(0);
+        counter!("nox_ingestor.nats.publishes_total", "outcome" => "err").absolute(0);
 
         // 10. Main loop
         let mut flush_interval = interval(self.config.app.flush_interval);

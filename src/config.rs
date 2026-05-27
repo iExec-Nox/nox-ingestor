@@ -7,7 +7,7 @@ use config_secret::EnvironmentSecretFile;
 use serde::Deserialize;
 
 /// TLS certificate configuration for mTLS client authentication.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct TlsConfig {
     /// Whether mTLS is enabled (`NOX_INGESTOR_NATS__TLS__ENABLED`, default `true`).
     /// Set to `false` for dev / Tenderly VM to connect to a plain NATS server.
@@ -21,6 +21,17 @@ pub struct TlsConfig {
     /// Client private key PEM content (`NOX_INGESTOR_NATS__TLS__KEY`). Required when `enabled`.
     #[serde(default)]
     pub key: String,
+}
+
+impl std::fmt::Debug for TlsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TlsConfig")
+            .field("enabled", &self.enabled)
+            .field("ca", &format_args!("<{} bytes>", self.ca.len()))
+            .field("cert", &format_args!("<{} bytes>", self.cert.len()))
+            .field("key", &"<redacted>")
+            .finish()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +148,14 @@ impl Config {
             .set_default("chain.retry_delay", "250ms")?
             .set_default("app.flush_interval", "5s")?
             .set_default("app.state_path", "nox_ingestor_state_421614.json")?
+            .set_default(
+                "nats.urls",
+                vec![
+                    "nats://localhost:4221",
+                    "nats://localhost:4222",
+                    "nats://localhost:4223",
+                ],
+            )?
             .set_default("nats.tls.enabled", true)?
             .set_default("nats.tls.ca", "")?
             .set_default("nats.tls.cert", "")?

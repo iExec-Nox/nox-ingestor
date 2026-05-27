@@ -84,11 +84,9 @@ impl NatsClient {
             ))
         })?;
 
-        let _ = state_tx.send(ConnectionState::Connected);
-
         let jetstream = jetstream::new(client.clone());
 
-        info!("NATS connected successfully");
+        info!("NATS client initialized; awaiting connection");
 
         Ok(Self {
             jetstream: Arc::new(jetstream),
