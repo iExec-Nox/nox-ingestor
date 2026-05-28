@@ -82,7 +82,12 @@ Configuration is loaded from environment variables with the `NOX_INGESTOR_` pref
 | `NOX_INGESTOR_CHAIN__RETRY_DELAY` | Delay between retries on RPC error | No | `250ms` |
 | `NOX_INGESTOR_APP__STATE_PATH` | Path to the cursor state file | No | `nox_ingestor_state_421614.json` |
 | `NOX_INGESTOR_APP__FLUSH_INTERVAL` | How often the cursor is flushed to disk | No | `5s` |
-| `NOX_INGESTOR_NATS__URL` | NATS server URL | No | `nats://localhost:4222` |
+| `NOX_INGESTOR_NATS__URLS` | NATS server URLs, comma-separated. One URL = single-node; several = cluster with transparent failover. Use the `tls://` scheme for immediate-TLS servers, `nats://` for STARTTLS / plaintext. | No | `nats://localhost:4221,nats://localhost:4222,nats://localhost:4223` |
+| `NOX_INGESTOR_NATS__TLS__ENABLED` | Enable mTLS. When `false`, connects in plaintext and the CA/CERT/KEY vars are ignored. | No | `true` |
+| `NOX_INGESTOR_NATS__TLS__CA` | CA certificate **PEM content** (not a path). Required when TLS enabled. | When TLS on | _(empty)_ |
+| `NOX_INGESTOR_NATS__TLS__CERT` | Client certificate PEM content (`CN=nox-ingestor`). Required when TLS enabled. | When TLS on | _(empty)_ |
+| `NOX_INGESTOR_NATS__TLS__KEY` | Client private key PEM content. Required when TLS enabled. | When TLS on | _(empty)_ |
+| `NOX_INGESTOR_NATS__NUM_REPLICAS` | JetStream stream replica count used when creating the stream. `1` for single-node, `3` for a 3-node cluster. If the stream already exists with a different count, the ingestor logs a warning and continues (it never mutates an existing stream). | No | `3` |
 | `NOX_INGESTOR_NATS__STREAM_NAME` | JetStream stream name | No | `nox_ingestor` |
 | `NOX_INGESTOR_NATS__SUBJECT` | Subject prefix for published messages | No | `nox_ingestor` |
 | `NOX_INGESTOR_NATS__RETENTION` | Stream message retention window | No | `1d` |

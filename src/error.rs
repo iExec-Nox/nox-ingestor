@@ -44,6 +44,9 @@ pub enum StateError {
 /// NATS related errors
 #[derive(Error, Debug)]
 pub enum NatsError {
+    #[error("TLS configuration error: {0}")]
+    Tls(String),
+
     #[error("Connection error: {0}")]
     Connection(String),
 

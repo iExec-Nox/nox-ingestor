@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use anyhow::Result;
 use axum::{Router, routing::get};
-use axum_prometheus::{Handle, MakeDefaultHandle, PrometheusMetricLayerBuilder, metrics::counter};
+use axum_prometheus::{
+    Handle, MakeDefaultHandle, PrometheusMetricLayerBuilder,
+    metrics::{counter, gauge},
+};
 use tokio::sync::watch;
 use tokio::time::{interval, sleep, timeout};
 use tokio_util::sync::CancellationToken;
@@ -16,7 +19,7 @@ use crate::config::Config;
 use crate::error::NoxError;
 use crate::events::{Operator, TransactionEvent};
 use crate::handlers;
-use crate::nats::{NatsClient, Publisher};
+use crate::nats::{ConnectionState, NatsClient, Publisher};
 use crate::state::StateStore;
 
 pub struct Application {
@@ -89,6 +92,13 @@ impl Application {
         let listener = tokio::net::TcpListener::bind(binding_address).await?;
         tokio::spawn(async move { axum::serve(listener, app).await });
 
+        // Initialize NATS metrics to zero so they appear in /metrics on startup
+        gauge!("nox_ingestor.nats.connection_state").set(0.0);
+        counter!("nox_ingestor.nats.reconnects_total").absolute(0);
+        gauge!("nox_ingestor.nats.buffer_len").set(0.0);
+        counter!("nox_ingestor.nats.publishes_total", "outcome" => "ok").absolute(0);
+        counter!("nox_ingestor.nats.publishes_total", "outcome" => "err").absolute(0);
+
         // 10. Main loop
         let mut flush_interval = interval(self.config.app.flush_interval);
         flush_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -96,6 +106,7 @@ impl Application {
         flush_interval.tick().await;
 
         let mut needs_delay = false;
+        let mut was_connected = *nats_state_rx.borrow() == ConnectionState::Connected;
 
         loop {
             // Handle delay outside of select! to allow cancellation during sleep
@@ -131,9 +142,18 @@ impl Application {
                         let state = *nats_state_rx.borrow();
                         info!(state = %state, "NATS state changed");
 
+                        let connected = state == ConnectionState::Connected;
+                        gauge!("nox_ingestor.nats.connection_state").set(if connected { 1.0 } else { 0.0 });
+                        if connected && !was_connected {
+                            counter!("nox_ingestor.nats.reconnects_total").increment(1);
+                        }
+                        was_connected = connected;
+
                         if let Err(e) = publisher.handle_state_change().await {
                             warn!(error = %e, "Error handling NATS state change");
                         }
+
+                        gauge!("nox_ingestor.nats.buffer_len").set(publisher.buffer_len() as f64);
 
                         // After flush, if buffer is fully drained, advance persisted state
                         // to catch up with next_block (all messages now confirmed by NATS)
@@ -147,6 +167,21 @@ impl Application {
                 _ = flush_interval.tick() => {
                     if let Err(e) = state_store.persist().await {
                         warn!(error = %e, "Failed to persist state");
+                    }
+                    // Buffer-drain retry: if events buffered while NATS was unhealthy,
+                    // the state-change watcher won't trigger drain on recovery.
+                    match publisher.try_resume_if_connected().await {
+                        Ok(true) => {
+                            info!("Buffer drained via periodic retry; chain reader resumed");
+                            gauge!("nox_ingestor.nats.buffer_len").set(publisher.buffer_len() as f64);
+                            if publisher.is_buffer_empty() && next_block > 0 {
+                                state_store.update(next_block - 1);
+                            }
+                        }
+                        Ok(false) => {}
+                        Err(e) => {
+                            warn!(error = %e, "Periodic buffer drain attempt failed");
+                        }
                     }
                 }
 
@@ -210,6 +245,7 @@ impl Application {
                             warn!(error = %e, "Failed to publish transaction");
                             sleep(self.config.nats.wait_interval).await;
                         }
+                        gauge!("nox_ingestor.nats.buffer_len").set(publisher.buffer_len() as f64);
                         counter!("nox_ingestor.chain.block_number", "chain_id" => self.config.chain.chain_id.to_string(), "type" => "published").absolute(tx_block_number);
                     }
                     // Always advance next_block to avoid re-reading in this session
