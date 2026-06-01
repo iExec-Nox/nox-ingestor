@@ -1,8 +1,10 @@
 //! RPC client wrapper using alloy
 
-use alloy::primitives::{Address, B256};
-use alloy::providers::{Provider, ProviderBuilder};
-use alloy::rpc::types::{BlockNumberOrTag, Filter, Log};
+use alloy::{
+    primitives::{Address, B256},
+    providers::{Provider, ProviderBuilder},
+    rpc::types::{BlockNumberOrTag, Filter, Log},
+};
 use std::sync::Arc;
 use tracing::info;
 
