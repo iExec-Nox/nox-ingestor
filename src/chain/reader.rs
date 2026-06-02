@@ -3,8 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use alloy::primitives::FixedBytes;
-use alloy::rpc::types::Log;
+use alloy::{primitives::FixedBytes, rpc::types::Log};
 use tokio::sync::watch;
 use tokio::time::sleep;
 use tracing::{debug, error, warn};

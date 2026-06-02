@@ -1,9 +1,11 @@
 //! NOX event parser using alloy sol! macro for type-safe event parsing
 
-use alloy::primitives::{Address, B256};
-use alloy::rpc::types::Log;
-use alloy::sol;
-use alloy::sol_types::SolEvent;
+use alloy::{
+    primitives::{Address, B256},
+    rpc::types::Log,
+    sol,
+    sol_types::SolEvent,
+};
 use tracing::debug;
 
 // Define NOX events using sol! macro
