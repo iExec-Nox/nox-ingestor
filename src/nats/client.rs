@@ -175,6 +175,29 @@ impl NatsClient {
     }
 }
 
+/// Normalizes a PEM string that may have been collapsed into a single line.
+///
+/// Handles two common inline injection patterns:
+/// - Spaces replacing newlines: `"-----BEGIN CERTIFICATE----- MIIFxx... -----END CERTIFICATE-----"`
+/// - Literal `\n` sequences from env vars or YAML double-quoted strings
+fn normalize_pem(pem: &str) -> String {
+    // Resolve literal \n sequences (env var injection)
+    let pem = pem.replace("\\n", "\n");
+    // Restore newlines around PEM section markers, then ensure a single trailing newline.
+    // Base64 alphabet has no spaces, so replacing ` -----`/`----- ` is unambiguous.
+    let normalized = pem
+        .trim_end()
+        .replace("----- ", "-----\n")
+        .replace(" -----", "\n-----");
+    // Trim trailing whitespace per line to handle multiple adjacent spaces (e.g. "body  -----END").
+    let trimmed = normalized
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    trimmed + "\n"
+}
+
 /// Build an in-memory rustls `ClientConfig` from PEM strings supplied via env vars.
 fn build_rustls_client_config(tls: &TlsConfig) -> Result<ClientConfig, NatsError> {
     for (label, value) in [("ca", &tls.ca), ("cert", &tls.cert), ("key", &tls.key)] {
@@ -186,11 +209,16 @@ fn build_rustls_client_config(tls: &TlsConfig) -> Result<ClientConfig, NatsError
         }
     }
 
+    let ca = normalize_pem(&tls.ca);
+    let cert = normalize_pem(&tls.cert);
+    let key = normalize_pem(&tls.key);
+
     let mut roots = RootCertStore::empty();
-    for cert in CertificateDer::pem_slice_iter(tls.ca.as_bytes()) {
-        let cert = cert.map_err(|e| NatsError::Tls(format!("Failed to parse CA PEM: {e}")))?;
+    for cert_der in CertificateDer::pem_slice_iter(ca.as_bytes()) {
+        let cert_der =
+            cert_der.map_err(|e| NatsError::Tls(format!("Failed to parse CA PEM: {e}")))?;
         roots
-            .add(cert)
+            .add(cert_der)
             .map_err(|e| NatsError::Tls(format!("Failed to add CA cert to root store: {e}")))?;
     }
     if roots.is_empty() {
@@ -199,21 +227,136 @@ fn build_rustls_client_config(tls: &TlsConfig) -> Result<ClientConfig, NatsError
         ));
     }
 
-    let cert_chain: Vec<CertificateDer<'static>> =
-        CertificateDer::pem_slice_iter(tls.cert.as_bytes())
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| NatsError::Tls(format!("Failed to parse client cert PEM: {e}")))?;
+    let cert_chain: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(cert.as_bytes())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| NatsError::Tls(format!("Failed to parse client cert PEM: {e}")))?;
     if cert_chain.is_empty() {
         return Err(NatsError::Tls(
             "No client certificates found in PEM content".to_string(),
         ));
     }
 
-    let key = PrivateKeyDer::from_pem_slice(tls.key.as_bytes())
+    let private_key = PrivateKeyDer::from_pem_slice(key.as_bytes())
         .map_err(|e| NatsError::Tls(format!("Failed to parse client key PEM: {e}")))?;
 
     ClientConfig::builder()
         .with_root_certificates(roots)
-        .with_client_auth_cert(cert_chain, key)
+        .with_client_auth_cert(cert_chain, private_key)
         .map_err(|e| NatsError::Tls(format!("Failed to build rustls client config: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_pem;
+
+    // Fake base64 bodies — content is irrelevant; only the structural normalization matters.
+    const BODY_A: &str = "MIIFajCCBFKgAwIBAgISA1aaaaaaaaaaaaaaaaaaaaaa";
+    const BODY_B: &str = "MIIFbjCCBFKgAwIBAgISB2bbbbbbbbbbbbbbbbbbbbbb";
+
+    /// A well-formed multi-line PEM block.
+    fn pem_block(label: &str, body: &str) -> String {
+        format!("-----BEGIN {label}-----\n{body}\n-----END {label}-----\n")
+    }
+
+    /// True if no marker still has a space directly adjacent to its `-----` boundary,
+    /// i.e. nothing left for the rustls PEM parser to choke on.
+    fn no_marker_adjacent_space(s: &str) -> bool {
+        !s.contains("----- ") && !s.contains(" -----")
+    }
+
+    /// True if no line carries trailing whitespace (RFC 7468 rejects it on base64 lines).
+    fn no_trailing_whitespace(s: &str) -> bool {
+        s.lines().all(|line| line == line.trim_end())
+    }
+
+    // ── Baseline (the documented happy paths) ────────────────────────────────
+
+    #[test]
+    fn single_cert_space_collapsed_is_normalized() {
+        let collapsed = format!("-----BEGIN CERTIFICATE----- {BODY_A} -----END CERTIFICATE-----");
+        let out = normalize_pem(&collapsed);
+        assert!(
+            no_marker_adjacent_space(&out),
+            "residual marker space: {out:?}"
+        );
+        assert!(
+            out.contains(&format!("\n{BODY_A}\n")),
+            "body not on its own line: {out:?}"
+        );
+    }
+
+    #[test]
+    fn single_cert_literal_backslash_n_is_resolved() {
+        let injected =
+            format!("-----BEGIN CERTIFICATE-----\\n{BODY_A}\\n-----END CERTIFICATE-----");
+        let out = normalize_pem(&injected);
+        assert!(!out.contains("\\n"), "literal \\n not resolved: {out:?}");
+        assert_eq!(out, pem_block("CERTIFICATE", BODY_A));
+    }
+
+    #[test]
+    fn already_valid_pem_is_left_intact() {
+        let valid = pem_block("CERTIFICATE", BODY_A);
+        assert_eq!(normalize_pem(&valid), valid);
+    }
+
+    #[test]
+    fn normalize_pem_is_idempotent() {
+        let collapsed = format!("-----BEGIN CERTIFICATE----- {BODY_A} -----END CERTIFICATE-----");
+        let once = normalize_pem(&collapsed);
+        assert_eq!(normalize_pem(&once), once, "second pass changed the output");
+    }
+
+    #[test]
+    fn multi_word_label_spaces_are_preserved() {
+        // S1: spaces *inside* a label (e.g. "EC PRIVATE KEY") must survive — they are
+        // flanked by letters, never adjacent to a `-----` boundary.
+        let collapsed =
+            format!("-----BEGIN EC PRIVATE KEY----- {BODY_A} -----END EC PRIVATE KEY-----");
+        let out = normalize_pem(&collapsed);
+        assert!(
+            out.contains("-----BEGIN EC PRIVATE KEY-----"),
+            "label corrupted: {out:?}"
+        );
+        assert!(
+            out.contains("-----END EC PRIVATE KEY-----"),
+            "label corrupted: {out:?}"
+        );
+    }
+
+    // ── W1: mixed-separator multi-block input must be fully normalized ────────
+
+    #[test]
+    fn w1_mixed_separator_chain_is_fully_normalized() {
+        // CA bundle where block 1 uses literal `\n` and block 2 is space-collapsed.
+        // After `\n` resolution block 1 yields a `-----\n`, tripping the early return
+        // and leaving block 2's spaces intact — block 2 then fails to parse.
+        let mixed = format!(
+            "-----BEGIN CERTIFICATE-----\\n{BODY_A}\\n-----END CERTIFICATE----- \
+             -----BEGIN CERTIFICATE----- {BODY_B} -----END CERTIFICATE-----"
+        );
+        let out = normalize_pem(&mixed);
+        assert!(
+            no_marker_adjacent_space(&out),
+            "block 2 left half-normalized (early return fired): {out:?}"
+        );
+        assert_eq!(
+            out.matches("-----END CERTIFICATE-----").count(),
+            2,
+            "both END markers should survive on their own lines: {out:?}"
+        );
+    }
+
+    // ── W2: double space before a marker must not leave trailing whitespace ───
+
+    #[test]
+    fn w2_double_space_leaves_no_trailing_whitespace() {
+        // Realistic shell-expansion artifact: two spaces before `-----END`.
+        let collapsed = format!("-----BEGIN CERTIFICATE----- {BODY_A}  -----END CERTIFICATE-----");
+        let out = normalize_pem(&collapsed);
+        assert!(
+            no_trailing_whitespace(&out),
+            "base64 line has trailing whitespace (RFC 7468 invalid): {out:?}"
+        );
+    }
 }
