@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/iExec-Nox/nox-ingestor/compare/v0.5.0...v0.6.0) (2026-06-02)
+
+
+### Features
+
+* expose first Nox metrics to Prometheus ([#34](https://github.com/iExec-Nox/nox-ingestor/issues/34)) ([b721a52](https://github.com/iExec-Nox/nox-ingestor/commit/b721a52bbc4704bcb9ce98fcdbd5116c129523f9))
+* support NATS cluster interactions and resilience ([#36](https://github.com/iExec-Nox/nox-ingestor/issues/36)) ([06bc84b](https://github.com/iExec-Nox/nox-ingestor/commit/06bc84b161b93d6932e4d54cfffc444d8ec43419))
+
+
+### Bug Fixes
+
+* normalize certificats ([#39](https://github.com/iExec-Nox/nox-ingestor/issues/39)) ([19f401a](https://github.com/iExec-Nox/nox-ingestor/commit/19f401abf7c1f661a737c3f326d27e7bc5f7440e))
+* PlaintextToEncrypted event has been removed from NoxCompute ([#31](https://github.com/iExec-Nox/nox-ingestor/issues/31)) ([eb06122](https://github.com/iExec-Nox/nox-ingestor/commit/eb0612237d14707e84a410e443665cc8d1896456))
+
 ## [0.5.0](https://github.com/iExec-Nox/nox-ingestor/compare/v0.4.0...v0.5.0) (2026-03-27)
 
 
