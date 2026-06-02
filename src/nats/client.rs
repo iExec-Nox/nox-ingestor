@@ -183,8 +183,8 @@ impl NatsClient {
 fn normalize_pem(pem: &str) -> String {
     // Resolve literal \n sequences (env var injection)
     let pem = pem.replace("\\n", "\n");
-    // Restore newlines around PEM section markers, then ensure a single trailing newline.
-    // Base64 alphabet has no spaces, so replacing ` -----`/`----- ` is unambiguous.
+    // Restore newlines around PEM markers. Only spaces adjacent to a `-----` boundary are
+    // touched; spaces inside labels (e.g. "EC PRIVATE KEY") are flanked by letters and left intact.
     let normalized = pem
         .trim_end()
         .replace("----- ", "-----\n")
