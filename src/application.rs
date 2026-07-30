@@ -1,11 +1,19 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use axum::{Router, routing::get};
+use axum::{
+    Json, Router,
+    extract::Request,
+    http::StatusCode,
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
+    routing::get,
+};
 use axum_prometheus::{
     Handle, MakeDefaultHandle, PrometheusMetricLayerBuilder,
     metrics::{counter, gauge},
 };
+use serde_json::json;
 use tokio::sync::watch;
 use tokio::time::{interval, sleep, timeout};
 use tokio_util::sync::CancellationToken;
@@ -13,6 +21,12 @@ use tracing::{debug, error, info, info_span, warn};
 
 /// Timeout for final state persistence on shutdown
 const SHUTDOWN_PERSIST_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Wall-clock ceiling on every HTTP route (`/`, `/health`, `/metrics`).
+///
+/// Not configurable: these routes touch no external dependency, so anything slower than a
+/// few seconds is a stuck process or a client dribbling out its request, never legitimate work.
+const SERVICE_ROUTE_TIMEOUT: Duration = Duration::from_secs(5);
 
 use crate::chain::{BlockReader, NoxEventParser};
 use crate::config::Config;
@@ -85,6 +99,9 @@ impl Application {
             .route("/health", get(handlers::health_check))
             .route("/metrics", get(handlers::metrics))
             .fallback(handlers::not_found)
+            .layer(middleware::from_fn(move |request, next| {
+                Self::enforce_timeout(SERVICE_ROUTE_TIMEOUT, request, next)
+            }))
             .layer(prometheus_layer)
             .with_state(metrics_handle);
         let binding_address = self.config.binding_address();
@@ -285,6 +302,21 @@ impl Application {
 
         info!("Listener stopped gracefully");
         Ok(())
+    }
+
+    /// Abandons a request that exceeds `limit`, answering 408 with `{"error": "..."}`.
+    ///
+    /// Matches the error envelope already used by [`handlers::not_found`] rather than
+    /// `tower_http::timeout::TimeoutLayer`'s empty body.
+    async fn enforce_timeout(limit: Duration, request: Request, next: Next) -> Response {
+        match timeout(limit, next.run(request)).await {
+            Ok(response) => response,
+            Err(_) => (
+                StatusCode::REQUEST_TIMEOUT,
+                Json(json!({ "error": "Request timed out" })),
+            )
+                .into_response(),
+        }
     }
 
     /// Load state store
@@ -581,5 +613,76 @@ fn log_event(event: &TransactionEvent) {
                 "WrapAsPublicHandle"
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request as HttpRequest;
+    use serde_json::Value;
+    use tower::ServiceExt;
+
+    /// Outlives any limit these tests set, so it only ever completes by being timed out.
+    async fn slow_handler() -> &'static str {
+        sleep(Duration::from_secs(60)).await;
+        "unreachable"
+    }
+
+    async fn fast_handler() -> &'static str {
+        "ok"
+    }
+
+    /// Mirrors how [`Application::run`] attaches the timeout: innermost,
+    /// wrapping the routes only.
+    fn router(limit: Duration) -> Router {
+        Router::new()
+            .route("/slow", get(slow_handler))
+            .route("/fast", get(fast_handler))
+            .layer(middleware::from_fn(move |request, next| {
+                Application::enforce_timeout(limit, request, next)
+            }))
+    }
+
+    /// Named `send` rather than `get` so it does not shadow [`axum::routing::get`] above.
+    async fn send(uri: &str, limit: Duration) -> Response {
+        router(limit)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("router is infallible")
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn handler_exceeding_the_limit_answers_408() {
+        let response = send("/slow", Duration::from_secs(1)).await;
+
+        assert_eq!(StatusCode::REQUEST_TIMEOUT, response.status());
+    }
+
+    /// The whole reason this is a `from_fn` rather than `tower_http::timeout::TimeoutLayer`:
+    /// the 408 carries the same envelope as [`handlers::not_found`] instead of an empty body.
+    #[tokio::test(start_paused = true)]
+    async fn timeout_response_carries_the_standard_error_envelope() {
+        let response = send("/slow", Duration::from_secs(1)).await;
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should be readable");
+        let json: Value = serde_json::from_slice(&body).expect("body should be JSON");
+        assert_eq!("Request timed out", json["error"]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn handler_within_the_limit_is_untouched() {
+        let response = send("/fast", Duration::from_secs(1)).await;
+
+        assert_eq!(StatusCode::OK, response.status());
     }
 }

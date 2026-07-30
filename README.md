@@ -116,6 +116,9 @@ RUST_LOG=debug   # Verbose logging
 
 The ingestor exposes a minimal HTTP server for monitoring. It does not expose any data ingestion or query API.
 
+Every endpoint below is subject to a fixed 5s request timeout. A request that exceeds it is
+abandoned and answered `408 Request Timeout` with `{"error": "Request timed out"}`.
+
 ### `GET /`
 
 Returns basic service information.
