@@ -1,15 +1,17 @@
 //! Simple NATS JetStream publisher
+use std::sync::Arc;
 
 use async_nats::HeaderMap;
 use async_nats::jetstream::Context as JetStreamContext;
 use axum_prometheus::metrics::counter;
-use std::sync::Arc;
+use opentelemetry::{Context, global};
 use tokio::sync::watch;
 use tracing::{debug, error, info, warn};
 
 use crate::config::NatsConfig;
 use crate::error::NatsError;
 use crate::events::TransactionMessage;
+use crate::observability::MessageHeaderInjector;
 
 use super::MessageBuffer;
 use super::client::ConnectionState;
@@ -45,6 +47,7 @@ impl Publisher {
     /// If connected, publishes immediately.
     /// If disconnected, buffers the message and signals pause.
     /// If buffer is full, returns error.
+    #[tracing::instrument(skip_all)]
     pub async fn publish(&mut self, message: TransactionMessage) -> Result<(), NatsError> {
         let state = *self.state_rx.borrow();
 
@@ -186,6 +189,7 @@ impl Publisher {
     }
 
     /// Publish a transaction message to JetStream
+    #[tracing::instrument(skip_all)]
     async fn do_publish(&self, message: &TransactionMessage) -> Result<(), NatsError> {
         let subject = message.subject(&self.subject_prefix);
         let payload = message
@@ -196,6 +200,10 @@ impl Publisher {
         let checksum = message.compute_checksum();
         let mut headers = HeaderMap::new();
         headers.insert("Nats-Msg-Id", checksum.as_str());
+        let cx = Context::current();
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&cx, &mut MessageHeaderInjector(&mut headers))
+        });
 
         let publish_future = self
             .jetstream

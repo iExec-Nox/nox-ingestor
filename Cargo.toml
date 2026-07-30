@@ -14,12 +14,17 @@ chrono = { version = "0.4.44", features = ["serde"] }
 config = "0.15.22"
 config-secret = "0.1.0"
 humantime-serde = "1.1.1"
+opentelemetry = "0.32.0"
+opentelemetry-appender-tracing = "0.32.0"
+opentelemetry-otlp = "0.32.0"
+opentelemetry_sdk = "0.32.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["fs","macros", "rt-multi-thread", "signal"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
 tracing = "0.1.44"
+tracing-opentelemetry = "0.33.0"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]

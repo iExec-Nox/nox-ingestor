@@ -40,6 +40,7 @@ pub struct Config {
     pub chain: ChainConfig,
     pub nats: NatsConfig,
     pub server: ServerConfig,
+    pub otel: OtelConfig,
 }
 
 /// Chain/RPC configuration
@@ -126,6 +127,12 @@ pub struct NatsConfig {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OtelConfig {
+    pub enabled: bool,
+    pub url: String,
 }
 
 impl Config {
