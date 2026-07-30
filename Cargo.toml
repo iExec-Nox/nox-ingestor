@@ -21,3 +21,9 @@ tokio = { version = "1.52.3", features = ["fs","macros", "rt-multi-thread", "sig
 tokio-util = { version = "0.7.18", features = ["rt"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[dev-dependencies]
+# `start_paused` for instant, deterministic timeout tests. Not part of tokio's "fs"/"macros"/etc.
+tokio = { version = "1.52.3", features = ["test-util"] }
+# `ServiceExt::oneshot`, to drive a Router in tests without binding a listener.
+tower = { version = "0.5.3", features = ["util"] }
