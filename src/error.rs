@@ -1,5 +1,6 @@
 //! Error types for nox-events
 
+use alloy::transports::{RpcError, TransportErrorKind};
 use thiserror::Error;
 
 /// Main error type for nox-events
@@ -23,6 +24,61 @@ pub enum ChainError {
 
     #[error("Provider error: {0}")]
     Provider(#[from] alloy::transports::TransportError),
+}
+
+/// Substrings seen in real-world `eth_getLogs` "range/response too large" rejections across
+/// RPC providers (Alchemy, Infura, QuickNode, Ankr, geth, erigon, ...). Wording is not
+/// standardized, so this is matched against a lowercased message rather than any error code.
+/// Adapted from eRPC's production classifier (`architecture/evm/error_normalizer.go` in
+/// github.com/erpc/erpc), which iExec already runs in front of some deployments.
+const LOG_RANGE_TOO_LARGE_MARKERS: &[&str] = &[
+    "try with this block range",
+    "block range is too wide",
+    "this block range should work",
+    "range too large",
+    "exceeds the range",
+    "max block range",
+    "logs over more",
+    "response size should not",
+    "returned more than",
+    "exceeds max results",
+    "range is too large",
+    "too large, max is",
+    "response too large",
+    "query exceeds limit",
+    "limit the query to",
+    "maximum block range",
+    "range limit exceeded",
+    "too many results",
+    "try paginating",
+    "eth_getlogs is limited",
+    "limited to",
+];
+
+impl ChainError {
+    /// True if the provider rejected `eth_getLogs` because the requested range would return
+    /// too many logs, rather than a transient/network failure. Deliberately does NOT key off
+    /// JSON-RPC error codes: e.g. Infura reuses code `-32005` for both this AND an unrelated
+    /// "exceeded project rate limit" rejection, distinguishable only by message text.
+    pub(crate) fn is_log_response_too_large(&self) -> bool {
+        let ChainError::Provider(err) = self else {
+            return false;
+        };
+        match err {
+            RpcError::ErrorResp(payload) => contains_log_range_marker(&payload.message),
+            RpcError::Transport(TransportErrorKind::HttpError(http)) => {
+                http.status == 413 || contains_log_range_marker(&http.body)
+            }
+            _ => false,
+        }
+    }
+}
+
+fn contains_log_range_marker(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    LOG_RANGE_TOO_LARGE_MARKERS
+        .iter()
+        .any(|m| lower.contains(m))
 }
 
 /// State persistence errors
@@ -61,4 +117,71 @@ pub enum NatsError {
 
     #[error("Buffer full: capacity {capacity}, cannot accept more messages")]
     BufferFull { capacity: usize },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::rpc::json_rpc::ErrorPayload;
+    use alloy::transports::HttpError;
+
+    fn error_resp(code: i64, message: &str) -> ChainError {
+        ChainError::Provider(RpcError::ErrorResp(ErrorPayload {
+            code,
+            message: message.to_string().into(),
+            data: None,
+        }))
+    }
+
+    fn http_error(status: u16, body: &str) -> ChainError {
+        ChainError::Provider(RpcError::Transport(TransportErrorKind::HttpError(
+            HttpError {
+                status,
+                body: body.to_string(),
+            },
+        )))
+    }
+
+    #[test]
+    fn detects_infura_style_too_many_results() {
+        let err = error_resp(
+            -32005,
+            "query returned more than 10000 results. Try with this block range [0x1, 0x100].",
+        );
+        assert!(err.is_log_response_too_large());
+    }
+
+    #[test]
+    fn does_not_flag_infura_rate_limit_sharing_the_same_error_code() {
+        let err = error_resp(-32005, "exceeded project rate limit");
+        assert!(!err.is_log_response_too_large());
+    }
+
+    #[test]
+    fn detects_alchemy_style_log_response_size_exceeded() {
+        let err = error_resp(
+            -32000,
+            "Log response size exceeded. this block range should work: [0x1, 0x64]",
+        );
+        assert!(err.is_log_response_too_large());
+    }
+
+    #[test]
+    fn detects_http_413() {
+        assert!(http_error(413, "").is_log_response_too_large());
+    }
+
+    #[test]
+    fn detects_marker_in_http_body_on_non_413_status() {
+        assert!(http_error(400, "block range is too large").is_log_response_too_large());
+    }
+
+    #[test]
+    fn does_not_flag_unrelated_errors() {
+        assert!(!error_resp(-32601, "method not found").is_log_response_too_large());
+        assert!(
+            !ChainError::Provider(RpcError::Transport(TransportErrorKind::BackendGone))
+                .is_log_response_too_large()
+        );
+    }
 }
