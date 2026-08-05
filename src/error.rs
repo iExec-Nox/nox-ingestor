@@ -67,6 +67,13 @@ impl ChainError {
         match err {
             RpcError::ErrorResp(payload) => contains_log_range_marker(&payload.message),
             RpcError::Transport(TransportErrorKind::HttpError(http)) => {
+                // 429 is a standardized (RFC 6585) rate-limit signal, never a range/size
+                // rejection. Check it before any message-text match, unlike JSON-RPC error
+                // codes (provider-defined, unreliable — see the -32005 note above): HTTP status
+                // codes are not something individual providers get to redefine.
+                if http.status == 429 {
+                    return false;
+                }
                 http.status == 413 || contains_log_range_marker(&http.body)
             }
             _ => false,
@@ -183,5 +190,13 @@ mod tests {
             !ChainError::Provider(RpcError::Transport(TransportErrorKind::BackendGone))
                 .is_log_response_too_large()
         );
+    }
+
+    #[test]
+    fn http_429_is_never_treated_as_too_large_even_with_a_marker_in_the_body() {
+        // A rate-limit response is a standardized HTTP-level signal (RFC 6585) that must win
+        // over message text, since providers occasionally phrase rate limits in ways that
+        // could otherwise coincidentally match a marker.
+        assert!(!http_error(429, "too many results, please slow down").is_log_response_too_large());
     }
 }
