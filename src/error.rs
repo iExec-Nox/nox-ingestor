@@ -38,6 +38,7 @@ const LOG_RANGE_TOO_LARGE_MARKERS: &[&str] = &[
     "range too large",
     "exceeds the range",
     "max block range",
+    "max range",
     "logs over more",
     "response size should not",
     "returned more than",
@@ -52,7 +53,6 @@ const LOG_RANGE_TOO_LARGE_MARKERS: &[&str] = &[
     "too many results",
     "try paginating",
     "eth_getlogs is limited",
-    "limited to",
 ];
 
 impl ChainError {
@@ -83,9 +83,14 @@ impl ChainError {
 
 fn contains_log_range_marker(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
+    // eRPC's list is a flat OR of the substrings above, plus one compound condition it
+    // deliberately does NOT flatten into two separate OR entries: "maximum" alone is far too
+    // generic (matches unrelated things like "maximum fee per gas"), so it only counts alongside
+    // "blocks distance".
     LOG_RANGE_TOO_LARGE_MARKERS
         .iter()
         .any(|m| lower.contains(m))
+        || (lower.contains("maximum") && lower.contains("blocks distance"))
 }
 
 /// State persistence errors
@@ -190,6 +195,18 @@ mod tests {
             !ChainError::Provider(RpcError::Transport(TransportErrorKind::BackendGone))
                 .is_log_response_too_large()
         );
+    }
+
+    #[test]
+    fn detects_compound_maximum_blocks_distance_marker() {
+        let err = error_resp(-32000, "the maximum blocks distance allowed is 5000");
+        assert!(err.is_log_response_too_large());
+    }
+
+    #[test]
+    fn does_not_flag_maximum_or_blocks_distance_alone() {
+        assert!(!error_resp(-32000, "maximum fee per gas exceeded").is_log_response_too_large());
+        assert!(!error_resp(-32000, "blocks distance mismatch").is_log_response_too_large());
     }
 
     #[test]
