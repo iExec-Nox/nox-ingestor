@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use alloy::{primitives::FixedBytes, rpc::types::Log};
+use axum_prometheus::metrics::counter;
 use tokio::sync::watch;
 use tokio::time::sleep;
 use tracing::{debug, error, warn};
@@ -142,7 +143,11 @@ impl BlockReader {
         let end_block = (start_block + self.batch_size - 1).min(latest_block);
 
         // Fetch logs for the entire range
-        let logs = self.client.get_logs(start_block, end_block).await?;
+        counter!("nox_ingestor_chain_batches_total").increment(1);
+        let logs = self
+            .client
+            .get_logs_split_on_error(start_block, end_block)
+            .await?;
 
         // Parse all logs and convert to TransactionEvent with metadata
         let mut events: Vec<(u64, u64, String, TransactionEvent)> = logs
