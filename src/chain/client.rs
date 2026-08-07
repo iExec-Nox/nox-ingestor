@@ -3,7 +3,7 @@
 use alloy::{
     primitives::{Address, B256},
     providers::{Provider, ProviderBuilder},
-    rpc::types::{BlockNumberOrTag, Filter, Log},
+    rpc::types::{BlockId, BlockNumberOrTag, Filter, Log},
 };
 use axum_prometheus::metrics::counter;
 use std::future::Future;
@@ -75,7 +75,52 @@ impl ChainClient {
         from_block: u64,
         to_block: u64,
     ) -> Result<Vec<Log>, ChainError> {
-        split_logs_on_error(from_block, to_block, |from, to| self.get_logs(from, to)).await
+        split_logs_on_error(
+            from_block,
+            to_block,
+            |from, to| self.get_logs(from, to),
+            |block| self.get_logs_via_block_receipts(block),
+        )
+        .await
+    }
+
+    /// Fetch this contract's matching logs for a single block via `eth_getBlockReceipts`
+    /// instead of `eth_getLogs`, filtering client-side by contract address and event topic0.
+    ///
+    /// Used as a fallback when even one block's worth of matching logs exceeds the provider's
+    /// `eth_getLogs` response cap: `eth_getBlockReceipts` returns every receipt in the block
+    /// unfiltered, so its response size is bounded by the block's gas limit, not by how many
+    /// Nox events happen to be in it — it isn't subject to the same "too many matched logs"
+    /// quota `eth_getLogs` is. Log-to-emitting-contract attribution is set by the EVM at
+    /// `LOG`-opcode execution time regardless of call depth, so this correctly captures events
+    /// emitted by `NoxCompute` even when reached via `caller -> application contract ->
+    /// NoxCompute` — the same address-matching semantics `get_logs`'s server-side filter
+    /// already relies on for the normal path.
+    ///
+    /// Errors rather than returning an empty result when the provider has no receipts for this
+    /// block: the caller only reaches this fallback because `eth_getLogs` just reported *this
+    /// exact block* as containing too many matching logs, so a `null` response here means the
+    /// node behind this call hasn't caught up (a stale replica, a brief reorg window), not that
+    /// the block is genuinely empty. Treating that as "zero logs, success" would silently drop
+    /// real events instead of letting the caller's retry loop try again.
+    async fn get_logs_via_block_receipts(&self, block_number: u64) -> Result<Vec<Log>, ChainError> {
+        let receipts = self
+            .primary_provider
+            .get_block_receipts(BlockId::Number(BlockNumberOrTag::Number(block_number)))
+            .await?
+            .ok_or(ChainError::MissingBlockReceipts(block_number))?;
+
+        Ok(receipts
+            .into_iter()
+            .flat_map(|receipt| receipt.inner.logs().to_vec())
+            .filter(|log| {
+                log.address() == self.contract_address
+                    && log
+                        .topics()
+                        .first()
+                        .is_some_and(|topic0| self.event_signatures.contains(topic0))
+            })
+            .collect())
     }
 }
 
@@ -83,14 +128,20 @@ impl ChainClient {
 /// halves whenever `fetch` reports the provider's log-count cap was exceeded. Iterative (a work
 /// stack), not recursive: a range bisects to width 1 in at most ~log2(range) steps, not worth
 /// boxing futures for.
-async fn split_logs_on_error<F, Fut>(
+///
+/// When a single block still exceeds the cap, `fetch_via_receipts` is tried once as a fallback
+/// (see [`ChainClient::get_logs_via_block_receipts`]) before giving up on that block.
+async fn split_logs_on_error<F, Fut, G, GFut>(
     from_block: u64,
     to_block: u64,
     mut fetch: F,
+    mut fetch_via_receipts: G,
 ) -> Result<Vec<Log>, ChainError>
 where
     F: FnMut(u64, u64) -> Fut,
     Fut: Future<Output = Result<Vec<Log>, ChainError>>,
+    G: FnMut(u64) -> GFut,
+    GFut: Future<Output = Result<Vec<Log>, ChainError>>,
 {
     let mut logs = Vec::new();
     let mut stack = vec![(from_block, to_block)];
@@ -105,15 +156,42 @@ where
                 stack.push((from, mid));
             }
             Err(e) if e.is_log_response_too_large() => {
-                // Irreducible: a single block still exceeds the provider's cap. Propagate so the
-                // caller's own retry loop keeps retrying — never drop events — but tag it
-                // separately from a generic error so operators can see this specific condition.
-                counter!("nox_ingestor_chain_log_range_irreducible_errors_total").increment(1);
+                // A single block still exceeds the cap. Try the eth_getBlockReceipts fallback
+                // before giving up — it isn't subject to the same "too many matched logs" quota.
                 warn!(
                     block = from,
-                    "single block log count still exceeds provider limit"
+                    "single block log count still exceeds provider limit; \
+                     falling back to eth_getBlockReceipts"
                 );
-                return Err(e);
+                match fetch_via_receipts(from).await {
+                    Ok(mut batch) => {
+                        counter!(
+                            "nox_ingestor_chain_block_receipts_fallback_total",
+                            "outcome" => "ok"
+                        )
+                        .increment(1);
+                        logs.append(&mut batch);
+                    }
+                    Err(fallback_err) => {
+                        // Irreducible: neither eth_getLogs nor the receipts fallback worked for
+                        // this block. Propagate the *original* too-large error so the caller's
+                        // own retry loop keeps retrying — never drop events — but tag it
+                        // separately so operators can see this specific condition.
+                        counter!(
+                            "nox_ingestor_chain_block_receipts_fallback_total",
+                            "outcome" => "err"
+                        )
+                        .increment(1);
+                        counter!("nox_ingestor_chain_log_range_irreducible_errors_total")
+                            .increment(1);
+                        warn!(
+                            block = from,
+                            error = %fallback_err,
+                            "eth_getBlockReceipts fallback also failed"
+                        );
+                        return Err(e);
+                    }
+                }
             }
             Err(e) => return Err(e),
         }
@@ -147,13 +225,24 @@ mod tests {
         }
     }
 
+    /// A fallback closure standing in for "receipts fallback unavailable/not needed" — used by
+    /// every test that isn't specifically exercising the fallback itself.
+    async fn failing_fallback(_block: u64) -> Result<Vec<Log>, ChainError> {
+        Err(other_error())
+    }
+
     #[tokio::test]
     async fn succeeds_without_splitting_when_whole_range_fits() {
         let calls = Cell::new(0u32);
-        let result = split_logs_on_error(10, 20, |from, _to| {
-            calls.set(calls.get() + 1);
-            async move { Ok(vec![log_for_block(from)]) }
-        })
+        let result = split_logs_on_error(
+            10,
+            20,
+            |from, _to| {
+                calls.set(calls.get() + 1);
+                async move { Ok(vec![log_for_block(from)]) }
+            },
+            failing_fallback,
+        )
         .await
         .unwrap();
 
@@ -164,16 +253,21 @@ mod tests {
     #[tokio::test]
     async fn splits_once_when_whole_range_is_too_large() {
         let calls = Cell::new(0u32);
-        let result = split_logs_on_error(10, 11, |from, to| {
-            calls.set(calls.get() + 1);
-            async move {
-                if from == to {
-                    Ok(vec![log_for_block(from)])
-                } else {
-                    Err(too_large())
+        let result = split_logs_on_error(
+            10,
+            11,
+            |from, to| {
+                calls.set(calls.get() + 1);
+                async move {
+                    if from == to {
+                        Ok(vec![log_for_block(from)])
+                    } else {
+                        Err(too_large())
+                    }
                 }
-            }
-        })
+            },
+            failing_fallback,
+        )
         .await
         .unwrap();
 
@@ -187,13 +281,18 @@ mod tests {
     #[tokio::test]
     async fn recurses_multiple_levels_and_partitions_the_range_exactly() {
         // Fails unless the sub-range is narrower than 4 blocks.
-        let result = split_logs_on_error(10, 25, |from, to| async move {
-            if to - from < 4 {
-                Ok((from..=to).map(log_for_block).collect())
-            } else {
-                Err(too_large())
-            }
-        })
+        let result = split_logs_on_error(
+            10,
+            25,
+            |from, to| async move {
+                if to - from < 4 {
+                    Ok((from..=to).map(log_for_block).collect())
+                } else {
+                    Err(too_large())
+                }
+            },
+            failing_fallback,
+        )
         .await
         .unwrap();
 
@@ -205,10 +304,15 @@ mod tests {
     #[tokio::test]
     async fn irreducible_single_block_propagates_without_further_splitting() {
         let calls = Cell::new(0u32);
-        let result = split_logs_on_error(5, 5, |_from, _to| {
-            calls.set(calls.get() + 1);
-            async { Err(too_large()) }
-        })
+        let result = split_logs_on_error(
+            5,
+            5,
+            |_from, _to| {
+                calls.set(calls.get() + 1);
+                async { Err(too_large()) }
+            },
+            failing_fallback,
+        )
         .await;
 
         assert!(result.is_err());
@@ -218,13 +322,59 @@ mod tests {
     #[tokio::test]
     async fn non_log_cap_error_propagates_immediately_without_splitting() {
         let calls = Cell::new(0u32);
-        let result = split_logs_on_error(10, 20, |_from, _to| {
-            calls.set(calls.get() + 1);
-            async { Err(other_error()) }
-        })
+        let result = split_logs_on_error(
+            10,
+            20,
+            |_from, _to| {
+                calls.set(calls.get() + 1);
+                async { Err(other_error()) }
+            },
+            failing_fallback,
+        )
         .await;
 
         assert!(result.is_err());
         assert_eq!(calls.get(), 1);
+    }
+
+    #[tokio::test]
+    async fn block_receipts_fallback_recovers_an_irreducible_block() {
+        let fallback_calls = Cell::new(0u32);
+        let result = split_logs_on_error(
+            5,
+            5,
+            |_from, _to| async { Err(too_large()) },
+            |block| {
+                fallback_calls.set(fallback_calls.get() + 1);
+                async move { Ok(vec![log_for_block(block)]) }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(fallback_calls.get(), 1);
+        assert_eq!(
+            result
+                .iter()
+                .filter_map(|l| l.block_number)
+                .collect::<Vec<_>>(),
+            vec![5]
+        );
+    }
+
+    #[tokio::test]
+    async fn block_receipts_fallback_failure_still_propagates_the_original_too_large_error() {
+        let result = split_logs_on_error(
+            5,
+            5,
+            |_from, _to| async { Err(too_large()) },
+            |_block| async { Err(other_error()) },
+        )
+        .await;
+
+        let err = result.expect_err("both eth_getLogs and the fallback failed");
+        // The error surfaced to the caller is the original too-large classification, not
+        // whatever unrelated error the fallback happened to fail with.
+        assert!(err.is_log_response_too_large());
     }
 }

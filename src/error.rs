@@ -24,6 +24,11 @@ pub enum ChainError {
 
     #[error("Provider error: {0}")]
     Provider(#[from] alloy::transports::TransportError),
+
+    #[error(
+        "eth_getBlockReceipts returned no receipts for block {0}, which is expected to contain matching logs"
+    )]
+    MissingBlockReceipts(u64),
 }
 
 /// Substrings seen in real-world `eth_getLogs` "range/response too large" rejections across
