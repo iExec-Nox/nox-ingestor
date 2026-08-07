@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -93,6 +94,13 @@ impl Application {
             .with_allow_patterns(&["/", "/health", "/metrics"])
             .build();
         let metrics_handle = Handle::make_default_handle(Handle::default());
+        let liveness = Arc::new(handlers::IngestionLiveness::new(
+            self.config.app.health_stall_threshold,
+        ));
+        let app_state = handlers::AppState {
+            metrics_handle,
+            liveness: liveness.clone(),
+        };
 
         let app = Router::new()
             .route("/", get(handlers::root))
@@ -103,7 +111,7 @@ impl Application {
                 Self::enforce_timeout(SERVICE_ROUTE_TIMEOUT, request, next)
             }))
             .layer(prometheus_layer)
-            .with_state(metrics_handle);
+            .with_state(app_state);
         let binding_address = self.config.binding_address();
         info!("starting TCP server listening on {binding_address}");
         let listener = tokio::net::TcpListener::bind(binding_address).await?;
@@ -221,6 +229,8 @@ impl Application {
 
                     // Check if we need to wait for new blocks
                     if next_block > latest {
+                        // Caught up to the chain head with nothing new: healthy idle, not a stall.
+                        liveness.record_success();
                         needs_delay = true;
                         return;
                     }
@@ -228,6 +238,9 @@ impl Application {
                     let batch = block_reader
                         .read_batch_with_retry(next_block, latest)
                         .await;
+                    // read_batch_with_retry only returns once it succeeds (it retries forever
+                    // internally), so reaching here is itself forward progress.
+                    liveness.record_success();
                     counter!("nox_ingestor.chain.block_number", "chain_id" => self.config.chain.chain_id.to_string(), "type" => "parsed").absolute(batch.end_block);
 
                     // Publish transaction messages

@@ -78,6 +78,11 @@ pub struct AppConfig {
     /// Flush interval (default: "5s")
     #[serde(with = "humantime_serde")]
     pub flush_interval: Duration,
+
+    /// How long `/health` tolerates no forward progress — no completed batch, and not simply
+    /// caught up to the chain head — before reporting unhealthy (default: "5m")
+    #[serde(with = "humantime_serde")]
+    pub health_stall_threshold: Duration,
 }
 
 /// NATS JetStream configuration
@@ -147,6 +152,7 @@ impl Config {
             .set_default("chain.poll_delay", "500ms")?
             .set_default("chain.retry_delay", "250ms")?
             .set_default("app.flush_interval", "5s")?
+            .set_default("app.health_stall_threshold", "5m")?
             .set_default("app.state_path", "nox_ingestor_state_421614.json")?
             .set_default(
                 "nats.urls",
