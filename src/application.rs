@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::Result;
 use axum::{
     Json, Router,
-    extract::{Extension, Request},
+    extract::Request,
     http::StatusCode,
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -97,6 +97,10 @@ impl Application {
         let liveness = Arc::new(handlers::IngestionLiveness::new(
             self.config.app.health_stall_threshold,
         ));
+        let app_state = handlers::AppState {
+            metrics_handle,
+            liveness: liveness.clone(),
+        };
 
         let app = Router::new()
             .route("/", get(handlers::root))
@@ -107,8 +111,7 @@ impl Application {
                 Self::enforce_timeout(SERVICE_ROUTE_TIMEOUT, request, next)
             }))
             .layer(prometheus_layer)
-            .layer(Extension(liveness.clone()))
-            .with_state(metrics_handle);
+            .with_state(app_state);
         let binding_address = self.config.binding_address();
         info!("starting TCP server listening on {binding_address}");
         let listener = tokio::net::TcpListener::bind(binding_address).await?;

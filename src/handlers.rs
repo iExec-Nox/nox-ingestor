@@ -6,13 +6,34 @@ use std::time::{Duration, Instant};
 
 use axum::{
     Json,
-    extract::{Extension, State},
+    extract::{FromRef, State},
     http::{StatusCode, Uri},
     response::IntoResponse,
 };
 use axum_prometheus::metrics_exporter_prometheus::PrometheusHandle;
 use chrono::Utc;
 use serde_json::{Value, json};
+
+/// Combined Axum router state: [`PrometheusHandle`] for `/metrics` and [`IngestionLiveness`]
+/// for `/health`, extracted independently by each handler via [`FromRef`] — a router has
+/// exactly one state type, and bundling here avoids either handler depending on the other's.
+#[derive(Clone)]
+pub struct AppState {
+    pub metrics_handle: PrometheusHandle,
+    pub liveness: Arc<IngestionLiveness>,
+}
+
+impl FromRef<AppState> for PrometheusHandle {
+    fn from_ref(state: &AppState) -> Self {
+        state.metrics_handle.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<IngestionLiveness> {
+    fn from_ref(state: &AppState) -> Self {
+        state.liveness.clone()
+    }
+}
 
 /// Tracks ingestion liveness for `/health`. [`Application::run`](crate::application::Application::run)
 /// calls [`record_success`](Self::record_success) each time the main loop makes forward
@@ -64,9 +85,7 @@ impl IngestionLiveness {
 /// Returns `200 {"status": "ok"}` while ingestion is making progress, or `503
 /// {"status": "unhealthy", "seconds_since_last_batch": N}` once [`IngestionLiveness`] has gone
 /// stale for longer than `app.health_stall_threshold`.
-pub async fn health_check(
-    Extension(liveness): Extension<Arc<IngestionLiveness>>,
-) -> impl IntoResponse {
+pub async fn health_check(State(liveness): State<Arc<IngestionLiveness>>) -> impl IntoResponse {
     match liveness.stale_for() {
         None => (StatusCode::OK, Json(json!({ "status": "ok" }))),
         Some(elapsed) => (
@@ -110,7 +129,7 @@ mod tests {
     async fn health_is_ok_when_liveness_is_fresh() {
         let liveness = Arc::new(IngestionLiveness::new(Duration::from_secs(60)));
 
-        let response = health_check(Extension(liveness)).await.into_response();
+        let response = health_check(State(liveness)).await.into_response();
 
         assert_eq!(StatusCode::OK, response.status());
     }
@@ -120,7 +139,7 @@ mod tests {
         let liveness = Arc::new(IngestionLiveness::new(Duration::from_millis(10)));
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        let response = health_check(Extension(liveness)).await.into_response();
+        let response = health_check(State(liveness)).await.into_response();
 
         assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
     }
@@ -131,7 +150,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
         liveness.record_success();
 
-        let response = health_check(Extension(liveness)).await.into_response();
+        let response = health_check(State(liveness)).await.into_response();
 
         assert_eq!(StatusCode::OK, response.status());
     }
