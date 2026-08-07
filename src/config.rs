@@ -79,7 +79,7 @@ pub struct AppConfig {
     #[serde(with = "humantime_serde")]
     pub flush_interval: Duration,
 
-    /// How long `/health` tolerates no ingestion progress — no batch completed and not merely
+    /// How long `/health` tolerates no forward progress — no completed batch, and not simply
     /// caught up to the chain head — before reporting unhealthy (default: "5m")
     #[serde(with = "humantime_serde")]
     pub health_stall_threshold: Duration,

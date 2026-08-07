@@ -18,7 +18,8 @@ use serde_json::{Value, json};
 /// calls [`record_success`](Self::record_success) each time the main loop makes forward
 /// progress — a batch completed or the reader is simply caught up to the chain head with
 /// nothing new to do. Both count as healthy; only a reader stuck retrying the same range (e.g.
-/// the irreducible case in [`crate::chain::client`]) leaves this stale.
+/// the irreducible case in [`crate::chain::ChainClient::get_logs_split_on_error`]) leaves this
+/// stale.
 ///
 /// Stores the last-success timestamp as millis-since-`created_at` in an `AtomicU64` rather than
 /// behind a `Mutex<Instant>`: `record_success` runs directly on the main ingestion loop (not a

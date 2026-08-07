@@ -82,6 +82,7 @@ Configuration is loaded from environment variables with the `NOX_INGESTOR_` pref
 | `NOX_INGESTOR_CHAIN__RETRY_DELAY` | Delay between retries on RPC error | No | `250ms` |
 | `NOX_INGESTOR_APP__STATE_PATH` | Path to the cursor state file | No | `nox_ingestor_state_421614.json` |
 | `NOX_INGESTOR_APP__FLUSH_INTERVAL` | How often the cursor is flushed to disk | No | `5s` |
+| `NOX_INGESTOR_APP__HEALTH_STALL_THRESHOLD` | How long `/health` tolerates no ingestion progress before reporting unhealthy | No | `5m` |
 | `NOX_INGESTOR_NATS__URLS` | NATS server URLs, comma-separated. One URL = single-node; several = cluster with transparent failover. Use the `tls://` scheme for immediate-TLS servers, `nats://` for STARTTLS / plaintext. | No | `nats://localhost:4221,nats://localhost:4222,nats://localhost:4223` |
 | `NOX_INGESTOR_NATS__TLS__ENABLED` | Enable mTLS. When `false`, connects in plaintext and the CA/CERT/KEY vars are ignored. | No | `true` |
 | `NOX_INGESTOR_NATS__TLS__CA` | CA certificate **PEM content** (not a path). Required when TLS enabled. | When TLS on | _(empty)_ |
@@ -134,13 +135,24 @@ Returns basic service information.
 
 ### `GET /health`
 
-Health check endpoint for monitoring and orchestration.
+Health check endpoint for monitoring and orchestration. Reports unhealthy once the ingestor
+has made no forward progress — no batch completed, and not simply caught up to the chain
+head — for longer than `NOX_INGESTOR_APP__HEALTH_STALL_THRESHOLD`.
 
-**Response:**
+**Response (healthy):** `200 OK`
 
 ```json
 {
   "status": "ok"
+}
+```
+
+**Response (stalled):** `503 Service Unavailable`
+
+```json
+{
+  "status": "unhealthy",
+  "seconds_since_last_batch": 320
 }
 ```
 
