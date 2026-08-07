@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0](https://github.com/iExec-Nox/nox-ingestor/compare/v0.6.0...v0.7.0) (2026-08-07)
+
+
+### Features
+
+* add ingestion liveness probe and use it in the health check endpoint ([#46](https://github.com/iExec-Nox/nox-ingestor/issues/46)) ([d99e166](https://github.com/iExec-Nox/nox-ingestor/commit/d99e166322dc82cadd43bb71868bc868c04223b7))
+* add slsa attest ([#42](https://github.com/iExec-Nox/nox-ingestor/issues/42)) ([f8efe82](https://github.com/iExec-Nox/nox-ingestor/commit/f8efe82946ee4032b10e5894eec6402353779391))
+
+
+### Bug Fixes
+
+* enforce a global HTTP request timeout ([#44](https://github.com/iExec-Nox/nox-ingestor/issues/44)) ([8c93a7c](https://github.com/iExec-Nox/nox-ingestor/commit/8c93a7cf2f572977e0a65e0995d7f997e455a892))
+* try to split eth_getLogs in sub-requests when logs batch is too large ([#45](https://github.com/iExec-Nox/nox-ingestor/issues/45)) ([8c4372e](https://github.com/iExec-Nox/nox-ingestor/commit/8c4372edcf6d5e7d857e13d957d672420c804c44))
+
 ## [0.6.0](https://github.com/iExec-Nox/nox-ingestor/compare/v0.5.0...v0.6.0) (2026-06-02)
 
 
