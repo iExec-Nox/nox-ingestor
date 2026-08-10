@@ -124,6 +124,13 @@ impl Application {
         counter!("nox_ingestor.nats.publishes_total", "outcome" => "ok").absolute(0);
         counter!("nox_ingestor.nats.publishes_total", "outcome" => "err").absolute(0);
 
+        // Initialize chain metrics to zero so ratio dashboards have a denominator from startup
+        counter!("nox_ingestor_chain_batches_total").absolute(0);
+        counter!("nox_ingestor_chain_log_range_splits_total").absolute(0);
+        counter!("nox_ingestor_chain_log_range_irreducible_errors_total").absolute(0);
+        counter!("nox_ingestor_chain_tx_receipts_fallback_total", "outcome" => "ok").absolute(0);
+        counter!("nox_ingestor_chain_tx_receipts_fallback_total", "outcome" => "err").absolute(0);
+
         // 10. Main loop
         let mut flush_interval = interval(self.config.app.flush_interval);
         flush_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);

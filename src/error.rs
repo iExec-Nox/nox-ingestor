@@ -1,5 +1,6 @@
 //! Error types for nox-events
 
+use alloy::primitives::B256;
 use alloy::transports::{RpcError, TransportErrorKind};
 use thiserror::Error;
 
@@ -24,6 +25,22 @@ pub enum ChainError {
 
     #[error("Provider error: {0}")]
     Provider(#[from] alloy::transports::TransportError),
+
+    #[error("block {0} not found while walking its transaction receipts")]
+    MissingBlock(u64),
+
+    #[error("no receipt for transaction {0}, in a block expected to contain matching logs")]
+    MissingTransactionReceipt(B256),
+
+    #[error(
+        "transaction {0} alone exceeds the provider's log response limit and cannot be split further"
+    )]
+    TransactionLogsTooLarge(B256),
+
+    #[error(
+        "no matching logs in block {0}, which eth_getLogs reported as exceeding the log response limit"
+    )]
+    NoMatchingLogsInBlock(u64),
 }
 
 /// Substrings seen in real-world `eth_getLogs` "range/response too large" rejections across
