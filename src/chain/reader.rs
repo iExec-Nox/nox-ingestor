@@ -20,6 +20,14 @@ use super::NoxEventParser;
 use super::client::ChainClient;
 use super::parser::NoxEvent;
 
+/// Ceiling on the exponential backoff applied to repeated batch-read failures.
+///
+/// Deliberately a constant rather than a config key: this is a protective ceiling on how hard
+/// the ingestor may hammer its RPC provider, not a tuning knob any deployment would want to
+/// raise. It sits well under the default `app.health_stall_threshold` (5m), so a batch that
+/// starts succeeding again is picked up long before `/health` reports a stall.
+const MAX_BATCH_RETRY_DELAY: Duration = Duration::from_secs(30);
+
 /// Result of reading a batch of blocks
 #[derive(Debug)]
 pub struct BatchResult {
@@ -94,8 +102,21 @@ impl BlockReader {
         }
     }
 
-    /// Read a batch with retry on failure
+    /// Read a batch with retry on failure, backing off exponentially between attempts.
+    ///
+    /// The backoff bounds how much RPC traffic a batch that cannot be read generates. A block
+    /// whose logs exceed the provider's cap falls through to
+    /// [`ChainClient::get_logs_via_transaction_receipts`], which costs one
+    /// `eth_getTransactionReceipt` per transaction in that block — hundreds of calls on a busy
+    /// chain. Retrying that at a flat `retry_delay` (250ms by default) would sustain thousands
+    /// of requests per second against the provider for as long as the condition lasts, which is
+    /// how a single unreadable block turns into a rate-limit or a ban that also breaks
+    /// `get_latest_block` and blocks recovery once the flood ends.
+    ///
+    /// The delay resets on every call, so it tracks one batch's consecutive failures and a
+    /// recovered batch starts from `retry_delay` again.
     pub async fn read_batch_with_retry(&self, start_block: u64, latest_block: u64) -> BatchResult {
+        let mut retry_delay = self.retry_delay;
         loop {
             match self.read_batch(start_block, latest_block).await {
                 Ok(result) => {
@@ -111,10 +132,12 @@ impl BlockReader {
                     warn!(
                         error = %e,
                         start_block,
-                        retry_delay_ms = %self.retry_delay.as_millis(),
+                        retry_delay_ms = %retry_delay.as_millis(),
                         "Failed to read batch, retrying"
                     );
-                    sleep(self.retry_delay).await;
+                    sleep(retry_delay).await;
+                    retry_delay =
+                        next_backoff(retry_delay, self.retry_delay, MAX_BATCH_RETRY_DELAY);
                 }
             }
         }
@@ -220,6 +243,17 @@ impl BlockReader {
 
         messages
     }
+}
+
+/// Doubles `current` up to `max`, for the retry loop in
+/// [`BlockReader::read_batch_with_retry`].
+///
+/// The ceiling is raised to `initial` when it sits below it, so an operator who configures a
+/// `chain.retry_delay` longer than [`MAX_BATCH_RETRY_DELAY`] keeps the delay they asked for
+/// instead of having it silently shortened — and a hypothetical zero ceiling degrades to no
+/// backoff rather than to a zero-delay busy loop.
+fn next_backoff(current: Duration, initial: Duration, max: Duration) -> Duration {
+    current.saturating_mul(2).min(max.max(initial))
 }
 
 /// Convert bytes32 to hex string
@@ -357,4 +391,74 @@ fn to_transaction_event(
     };
 
     Some((block_number, log_index, tx_hash, event))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DEFAULT_RETRY_DELAY: Duration = Duration::from_millis(250);
+
+    #[test]
+    fn backoff_doubles_each_consecutive_failure() {
+        let delay = next_backoff(
+            DEFAULT_RETRY_DELAY,
+            DEFAULT_RETRY_DELAY,
+            MAX_BATCH_RETRY_DELAY,
+        );
+
+        assert_eq!(delay, Duration::from_millis(500));
+    }
+
+    #[test]
+    fn backoff_stops_growing_at_the_ceiling() {
+        let delay = next_backoff(
+            Duration::from_secs(20),
+            DEFAULT_RETRY_DELAY,
+            MAX_BATCH_RETRY_DELAY,
+        );
+
+        assert_eq!(delay, MAX_BATCH_RETRY_DELAY);
+    }
+
+    #[test]
+    fn backoff_is_a_fixed_point_once_the_ceiling_is_reached() {
+        let delay = next_backoff(
+            MAX_BATCH_RETRY_DELAY,
+            DEFAULT_RETRY_DELAY,
+            MAX_BATCH_RETRY_DELAY,
+        );
+
+        assert_eq!(delay, MAX_BATCH_RETRY_DELAY);
+    }
+
+    #[test]
+    fn backoff_reaches_the_ceiling_from_the_default_delay_in_a_bounded_number_of_retries() {
+        // The whole point of the ceiling: an unreadable block must stop costing a full
+        // per-transaction receipt walk every 250ms within seconds, not minutes.
+        let mut delay = DEFAULT_RETRY_DELAY;
+        let mut retries = 0;
+        while delay < MAX_BATCH_RETRY_DELAY {
+            delay = next_backoff(delay, DEFAULT_RETRY_DELAY, MAX_BATCH_RETRY_DELAY);
+            retries += 1;
+        }
+
+        assert_eq!(retries, 7);
+    }
+
+    #[test]
+    fn backoff_never_shortens_a_retry_delay_configured_above_the_ceiling() {
+        let configured = MAX_BATCH_RETRY_DELAY + Duration::from_secs(30);
+
+        let delay = next_backoff(configured, configured, MAX_BATCH_RETRY_DELAY);
+
+        assert_eq!(delay, configured);
+    }
+
+    #[test]
+    fn backoff_with_a_zero_ceiling_holds_the_initial_delay_instead_of_busy_looping() {
+        let delay = next_backoff(DEFAULT_RETRY_DELAY, DEFAULT_RETRY_DELAY, Duration::ZERO);
+
+        assert_eq!(delay, DEFAULT_RETRY_DELAY);
+    }
 }

@@ -1,9 +1,10 @@
 //! RPC client wrapper using alloy
 
 use alloy::{
+    network::BlockResponse,
     primitives::{Address, B256},
     providers::{Provider, ProviderBuilder},
-    rpc::types::{BlockId, BlockNumberOrTag, Filter, Log},
+    rpc::types::{BlockNumberOrTag, Filter, Log},
 };
 use axum_prometheus::metrics::counter;
 use std::future::Future;
@@ -79,49 +80,97 @@ impl ChainClient {
             from_block,
             to_block,
             |from, to| self.get_logs(from, to),
-            |block| self.get_logs_via_block_receipts(block),
+            |block| self.get_logs_via_transaction_receipts(block),
         )
         .await
     }
 
-    /// Fetch this contract's matching logs for a single block via `eth_getBlockReceipts`
-    /// instead of `eth_getLogs`, filtering client-side by contract address and event topic0.
+    /// Fetch this contract's matching logs for a single block by walking that block's
+    /// transactions one receipt at a time, filtering client-side by contract address and topic0.
     ///
     /// Used as a fallback when even one block's worth of matching logs exceeds the provider's
-    /// `eth_getLogs` response cap: `eth_getBlockReceipts` returns every receipt in the block
-    /// unfiltered, so its response size is bounded by the block's gas limit, not by how many
-    /// Nox events happen to be in it — it isn't subject to the same "too many matched logs"
-    /// quota `eth_getLogs` is. Log-to-emitting-contract attribution is set by the EVM at
-    /// `LOG`-opcode execution time regardless of call depth, so this correctly captures events
-    /// emitted by `NoxCompute` even when reached via `caller -> application contract ->
-    /// NoxCompute` — the same address-matching semantics `get_logs`'s server-side filter
-    /// already relies on for the normal path.
+    /// `eth_getLogs` cap. Fetching per transaction keeps each response small — the same
+    /// subdivision strategy the block-range bisection uses, applied one level further down — so
+    /// it clears response-*size* caps that a whole-block fetch would still trip, since a
+    /// whole-block response is necessarily larger than the filtered `eth_getLogs` one that just
+    /// failed. It also depends only on `eth_getBlockByNumber` and `eth_getTransactionReceipt`,
+    /// core methods every provider implements, rather than the later-standardised
+    /// `eth_getBlockReceipts`, which some providers still do not serve.
     ///
-    /// Errors rather than returning an empty result when the provider has no receipts for this
-    /// block: the caller only reaches this fallback because `eth_getLogs` just reported *this
-    /// exact block* as containing too many matching logs, so a `null` response here means the
-    /// node behind this call hasn't caught up (a stale replica, a brief reorg window), not that
-    /// the block is genuinely empty. Treating that as "zero logs, success" would silently drop
-    /// real events instead of letting the caller's retry loop try again.
-    async fn get_logs_via_block_receipts(&self, block_number: u64) -> Result<Vec<Log>, ChainError> {
-        let receipts = self
+    /// Log-to-emitting-contract attribution is set by the EVM when the `LOG` opcode executes,
+    /// regardless of call depth, so this captures events emitted by `NoxCompute` even when
+    /// reached via `caller -> application contract -> NoxCompute` — the same semantics
+    /// [`ChainClient::get_logs`]'s server-side address filter relies on for the normal path.
+    ///
+    /// Every "nothing found" outcome is an error rather than an empty success. The caller only
+    /// reaches this fallback because `eth_getLogs` just reported *this exact block* as holding
+    /// too many matching logs, so a missing block, a missing receipt, or an empty filter result
+    /// all mean something is wrong (a lagging replica, a reorg, a filter bug) — never that the
+    /// block is genuinely empty. Returning `Ok(vec![])` would let the caller advance its cursor
+    /// past those events and drop them permanently.
+    async fn get_logs_via_transaction_receipts(
+        &self,
+        block_number: u64,
+    ) -> Result<Vec<Log>, ChainError> {
+        let block = self
             .primary_provider
-            .get_block_receipts(BlockId::Number(BlockNumberOrTag::Number(block_number)))
+            .get_block_by_number(BlockNumberOrTag::Number(block_number))
             .await?
-            .ok_or(ChainError::MissingBlockReceipts(block_number))?;
+            .ok_or(ChainError::MissingBlock(block_number))?;
+        // Hashes-only is `get_block_by_number`'s default, keeping this response small even for
+        // a block packed with transactions.
+        let tx_hashes: Vec<B256> = block.transactions().hashes().collect();
 
-        Ok(receipts
-            .into_iter()
-            .flat_map(|receipt| receipt.inner.logs().to_vec())
-            .filter(|log| {
-                log.address() == self.contract_address
-                    && log
-                        .topics()
-                        .first()
-                        .is_some_and(|topic0| self.event_signatures.contains(topic0))
-            })
-            .collect())
+        // Sequential on purpose: this path only runs on an already-degraded block, where not
+        // stampeding the provider matters more than latency.
+        let mut logs = Vec::new();
+        for tx_hash in tx_hashes {
+            let receipt = match self.primary_provider.get_transaction_receipt(tx_hash).await {
+                Ok(Some(receipt)) => receipt,
+                Ok(None) => return Err(ChainError::MissingTransactionReceipt(tx_hash)),
+                Err(e) => {
+                    let error = ChainError::from(e);
+                    // A single transaction is the floor for this strategy: no standard RPC
+                    // method returns part of a receipt, so name the transaction explicitly
+                    // rather than reporting the whole block as irreducible.
+                    return Err(if error.is_log_response_too_large() {
+                        ChainError::TransactionLogsTooLarge(tx_hash)
+                    } else {
+                        error
+                    });
+                }
+            };
+
+            logs.extend(matching_logs(
+                receipt.inner.into_logs(),
+                self.contract_address,
+                &self.event_signatures,
+            ));
+        }
+
+        if logs.is_empty() {
+            return Err(ChainError::NoMatchingLogsInBlock(block_number));
+        }
+
+        Ok(logs)
     }
+}
+
+/// Keeps only the logs emitted by `contract_address` whose topic0 is one of `event_signatures`.
+///
+/// The client-side equivalent of the server-side filter [`ChainClient::get_logs`] builds, for
+/// the fallback path that fetches receipts unfiltered. Logs with no topics at all (anonymous
+/// events) never match, since they carry no topic0 to compare.
+fn matching_logs(logs: Vec<Log>, contract_address: Address, event_signatures: &[B256]) -> Vec<Log> {
+    logs.into_iter()
+        .filter(|log| {
+            log.address() == contract_address
+                && log
+                    .topics()
+                    .first()
+                    .is_some_and(|topic0| event_signatures.contains(topic0))
+        })
+        .collect()
 }
 
 /// Fetches logs for `[from_block, to_block]` via `fetch`, bisecting the range and retrying the
@@ -130,7 +179,7 @@ impl ChainClient {
 /// boxing futures for.
 ///
 /// When a single block still exceeds the cap, `fetch_via_receipts` is tried once as a fallback
-/// (see [`ChainClient::get_logs_via_block_receipts`]) before giving up on that block.
+/// (see [`ChainClient::get_logs_via_transaction_receipts`]) before giving up on that block.
 async fn split_logs_on_error<F, Fut, G, GFut>(
     from_block: u64,
     to_block: u64,
@@ -156,17 +205,18 @@ where
                 stack.push((from, mid));
             }
             Err(e) if e.is_log_response_too_large() => {
-                // A single block still exceeds the cap. Try the eth_getBlockReceipts fallback
-                // before giving up — it isn't subject to the same "too many matched logs" quota.
+                // A single block still exceeds the cap. Walk that block's transactions one
+                // receipt at a time before giving up — each receipt is a smaller response than
+                // the whole-block filtered query that just failed.
                 warn!(
                     block = from,
                     "single block log count still exceeds provider limit; \
-                     falling back to eth_getBlockReceipts"
+                     falling back to per-transaction receipts"
                 );
                 match fetch_via_receipts(from).await {
                     Ok(mut batch) => {
                         counter!(
-                            "nox_ingestor_chain_block_receipts_fallback_total",
+                            "nox_ingestor_chain_tx_receipts_fallback_total",
                             "outcome" => "ok"
                         )
                         .increment(1);
@@ -178,7 +228,7 @@ where
                         // own retry loop keeps retrying — never drop events — but tag it
                         // separately so operators can see this specific condition.
                         counter!(
-                            "nox_ingestor_chain_block_receipts_fallback_total",
+                            "nox_ingestor_chain_tx_receipts_fallback_total",
                             "outcome" => "err"
                         )
                         .increment(1);
@@ -187,7 +237,7 @@ where
                         warn!(
                             block = from,
                             error = %fallback_err,
-                            "eth_getBlockReceipts fallback also failed"
+                            "per-transaction receipts fallback also failed"
                         );
                         return Err(e);
                     }
@@ -302,8 +352,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn irreducible_single_block_propagates_without_further_splitting() {
+    async fn single_block_is_not_split_further_and_falls_back_exactly_once() {
         let calls = Cell::new(0u32);
+        let fallback_calls = Cell::new(0u32);
         let result = split_logs_on_error(
             5,
             5,
@@ -311,12 +362,18 @@ mod tests {
                 calls.set(calls.get() + 1);
                 async { Err(too_large()) }
             },
-            failing_fallback,
+            |_block| {
+                fallback_calls.set(fallback_calls.get() + 1);
+                async { Err(other_error()) }
+            },
         )
         .await;
 
         assert!(result.is_err());
+        // A width-1 range cannot bisect, so `fetch` runs once and the fallback runs once —
+        // never a second `fetch` on the same block.
         assert_eq!(calls.get(), 1);
+        assert_eq!(fallback_calls.get(), 1);
     }
 
     #[tokio::test]
@@ -338,7 +395,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn block_receipts_fallback_recovers_an_irreducible_block() {
+    async fn receipts_fallback_recovers_an_irreducible_block() {
         let fallback_calls = Cell::new(0u32);
         let result = split_logs_on_error(
             5,
@@ -363,7 +420,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn block_receipts_fallback_failure_still_propagates_the_original_too_large_error() {
+    async fn receipts_fallback_failure_still_propagates_the_original_too_large_error() {
         let result = split_logs_on_error(
             5,
             5,
@@ -376,5 +433,81 @@ mod tests {
         // The error surfaced to the caller is the original too-large classification, not
         // whatever unrelated error the fallback happened to fail with.
         assert!(err.is_log_response_too_large());
+    }
+
+    // `matching_logs` reimplements client-side what `get_logs` asks the node to do server-side.
+    // These assert the two agree, since a divergence silently drops real events on the
+    // fallback path.
+
+    const NOX: Address = Address::new([0x11; 20]);
+    const OTHER_CONTRACT: Address = Address::new([0x22; 20]);
+    const WRAP_SIG: B256 = B256::new([0xaa; 32]);
+    const ADD_SIG: B256 = B256::new([0xbb; 32]);
+    const UNKNOWN_SIG: B256 = B256::new([0xcc; 32]);
+
+    fn log_with(address: Address, topics: Vec<B256>) -> Log {
+        Log {
+            inner: alloy::primitives::Log::new_unchecked(address, topics, Default::default()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn matching_logs_keeps_this_contracts_known_events() {
+        let logs = vec![log_with(NOX, vec![WRAP_SIG]), log_with(NOX, vec![ADD_SIG])];
+
+        let matched = matching_logs(logs, NOX, &[WRAP_SIG, ADD_SIG]);
+
+        assert_eq!(matched.len(), 2);
+    }
+
+    #[test]
+    fn matching_logs_rejects_another_contract_emitting_the_same_signature() {
+        // The decisive case for the `caller -> app contract -> NoxCompute` path: an unrelated
+        // contract emitting an identically-named event must not be ingested as ours.
+        let logs = vec![log_with(OTHER_CONTRACT, vec![WRAP_SIG])];
+
+        assert!(matching_logs(logs, NOX, &[WRAP_SIG]).is_empty());
+    }
+
+    #[test]
+    fn matching_logs_rejects_unknown_signatures_from_this_contract() {
+        let logs = vec![log_with(NOX, vec![UNKNOWN_SIG])];
+
+        assert!(matching_logs(logs, NOX, &[WRAP_SIG, ADD_SIG]).is_empty());
+    }
+
+    #[test]
+    fn matching_logs_rejects_anonymous_events_carrying_no_topic0() {
+        let logs = vec![log_with(NOX, vec![])];
+
+        assert!(matching_logs(logs, NOX, &[WRAP_SIG]).is_empty());
+    }
+
+    #[test]
+    fn matching_logs_matches_on_topic0_only_ignoring_indexed_arguments() {
+        // Indexed args occupy topics 1..=3; only topic0 identifies the event.
+        let logs = vec![log_with(NOX, vec![WRAP_SIG, UNKNOWN_SIG, UNKNOWN_SIG])];
+
+        assert_eq!(matching_logs(logs, NOX, &[WRAP_SIG]).len(), 1);
+    }
+
+    #[test]
+    fn matching_logs_preserves_input_order_of_kept_logs() {
+        let logs = vec![
+            log_with(NOX, vec![ADD_SIG]),
+            log_with(OTHER_CONTRACT, vec![WRAP_SIG]),
+            log_with(NOX, vec![WRAP_SIG]),
+        ];
+
+        let matched = matching_logs(logs, NOX, &[WRAP_SIG, ADD_SIG]);
+
+        assert_eq!(
+            matched
+                .iter()
+                .map(|log| log.topics()[0])
+                .collect::<Vec<_>>(),
+            vec![ADD_SIG, WRAP_SIG]
+        );
     }
 }
